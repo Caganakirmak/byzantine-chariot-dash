@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Sky, Text } from "@react-three/drei";
+import { Sky } from "@react-three/drei";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,11 @@ type Chariot = {
   id: number;
   team: Team;
   name: string;
-  t: number; // progress in laps (integer = lap count)
-  lane: number; // -1 inner ... 1 outer
+  t: number;
+  lane: number;
   speed: number;
   baseSpeed: number;
+  stamina: number; // 0..1, only used by player meaningfully
   isPlayer: boolean;
   finished: boolean;
   finishOrder?: number;
@@ -21,84 +22,47 @@ type Chariot = {
 
 const TOTAL_LAPS = 3;
 
-// Track geometry — rounded-rectangle (oval) hippodrome
+// Track geometry
 const STRAIGHT = 60;
 const INNER_RY = 28;
 const OUTER_RY = 44;
 const LANE_SPAN = OUTER_RY - INNER_RY;
 
-// Returns world position + heading angle (radians, around Y axis)
-function trackPos(t: number, lane: number) {
-  const ry = INNER_RY + ((lane + 1) / 2) * LANE_SPAN;
-  const rx = ry;
-  const straightLen = STRAIGHT * 2;
-  const turnLen = Math.PI * ry;
-  const total = 2 * straightLen + 2 * turnLen;
-
-  let d = ((t % 1) + 1) % 1;
-  d *= total;
-
-  // Counterclockwise viewed from above (left-handed look in three: +X right, +Z toward camera)
-  // Segment 1: bottom straight (positive Z), going from +X to -X
-  if (d < straightLen) {
-    const u = d / straightLen;
-    return { x: STRAIGHT - u * straightLen, z: ry, angle: -Math.PI / 2 };
-  }
-  d -= straightLen;
-  // Segment 2: left turn, semicircle from (-STRAIGHT, +ry) → (-STRAIGHT, -ry)
-  if (d < turnLen) {
-    const u = d / turnLen;
-    const theta = Math.PI / 2 - u * Math.PI; // 90° → -90°
-    return {
-      x: -STRAIGHT + Math.cos(Math.PI - 0) * 0 + (-Math.sin(theta) * 0) - Math.sin(theta - Math.PI / 2) * 0,
-      z: 0, angle: 0,
-    } as any; // replaced below
-  }
-  // Recompute segment 2 cleanly
-  return { x: 0, z: 0, angle: 0 };
-}
-
-// Cleaner version
+// Forward vector convention: with rotation.y = θ, local +X maps to world (cosθ, 0, -sinθ)
 function trackPosClean(t: number, lane: number) {
   const ry = INNER_RY + ((lane + 1) / 2) * LANE_SPAN;
-  const rx = ry;
   const straightLen = STRAIGHT * 2;
   const turnLen = Math.PI * ry;
   const total = 2 * straightLen + 2 * turnLen;
+  let d = (((t % 1) + 1) % 1) * total;
 
-  let d = ((t % 1) + 1) % 1;
-  d *= total;
-
+  // Seg 1: bottom straight, z=+ry, moving -X
   if (d < straightLen) {
-    const u = d / straightLen;
-    return { x: STRAIGHT - u * straightLen, z: ry, angle: -Math.PI / 2 };
+    return { x: STRAIGHT - d, z: ry, angle: Math.PI };
   }
   d -= straightLen;
+  // Seg 2: left semicircle around (-STRAIGHT, 0)
   if (d < turnLen) {
-    // Left turn around (-STRAIGHT, 0)
-    const u = d / turnLen;
-    const theta = Math.PI / 2 - u * Math.PI; // from +90° to -90°
-    const cx = -STRAIGHT;
-    const x = cx + Math.cos(theta + Math.PI) * rx; // mirror so it bulges left
-    const z = Math.sin(theta) * ry;
-    // angle: tangent of circle going CCW around left center
-    const angle = theta - Math.PI; // facing along motion
-    return { x, z, angle };
+    const phi = d / ry;
+    const a = Math.PI / 2 + phi;
+    const x = -STRAIGHT + Math.cos(a) * ry;
+    const z = Math.sin(a) * ry;
+    const tx = -Math.sin(a), tz = Math.cos(a);
+    return { x, z, angle: Math.atan2(-tz, tx) };
   }
   d -= turnLen;
+  // Seg 3: top straight, z=-ry, moving +X
   if (d < straightLen) {
-    const u = d / straightLen;
-    return { x: -STRAIGHT + u * straightLen, z: -ry, angle: Math.PI / 2 };
+    return { x: -STRAIGHT + d, z: -ry, angle: 0 };
   }
   d -= straightLen;
-  // Right turn around (+STRAIGHT, 0): from (+STRAIGHT,-ry) to (+STRAIGHT,+ry)
-  const u = d / turnLen;
-  const theta = -Math.PI / 2 + u * Math.PI; // from -90° to +90°
-  const cx = STRAIGHT;
-  const x = cx + Math.cos(theta) * rx;
-  const z = Math.sin(theta) * ry;
-  const angle = theta; // tangent direction
-  return { x, z, angle };
+  // Seg 4: right semicircle around (+STRAIGHT, 0)
+  const phi = d / ry;
+  const a = -Math.PI / 2 + phi;
+  const x = STRAIGHT + Math.cos(a) * ry;
+  const z = Math.sin(a) * ry;
+  const tx = -Math.sin(a), tz = Math.cos(a);
+  return { x, z, angle: Math.atan2(-tz, tx) };
 }
 
 const BLUE_NAMES = ["Porphyrios", "Konstantinos", "Theodoros", "Isaakios"];
@@ -116,6 +80,7 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
       lane: -0.6 + i * 0.2,
       speed: 0,
       baseSpeed: 0.018 + Math.random() * 0.003,
+      stamina: 1,
       isPlayer: team === "blue" && i === playerIdx,
       finished: false,
     });
@@ -127,6 +92,7 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
       lane: -0.5 + i * 0.2,
       speed: 0,
       baseSpeed: 0.018 + Math.random() * 0.003,
+      stamina: 1,
       isPlayer: team === "green" && i === playerIdx,
       finished: false,
     });
@@ -134,22 +100,20 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
   return list;
 }
 
-// ---------- Visual components ----------
+// ---------- Visuals ----------
 
 function Ground() {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} receiveShadow>
-      <planeGeometry args={[400, 400]} />
+      <planeGeometry args={[600, 600]} />
       <meshStandardMaterial color="#3a2a18" />
     </mesh>
   );
 }
 
 function Track() {
-  // Build the oval sand track as a flat ring shape
   const shape = useMemo(() => {
     const s = new THREE.Shape();
-    // outer rounded rect
     const addRoundRect = (path: THREE.Shape | THREE.Path, ry: number) => {
       const w = STRAIGHT, h = ry;
       path.moveTo(w, h);
@@ -168,7 +132,7 @@ function Track() {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
       <shapeGeometry args={[shape]} />
-      <meshStandardMaterial color="#c9a26b" roughness={1} />
+      <meshStandardMaterial color="#d6b079" roughness={1} />
     </mesh>
   );
 }
@@ -176,64 +140,238 @@ function Track() {
 function Spina() {
   return (
     <group>
-      {/* central platform */}
       <mesh position={[0, 0.4, 0]} castShadow receiveShadow>
         <boxGeometry args={[STRAIGHT * 1.7, 0.8, INNER_RY * 0.9]} />
-        <meshStandardMaterial color="#d8cdb6" />
+        <meshStandardMaterial color="#ece1c8" />
       </mesh>
-      {/* obelisk */}
-      <mesh position={[0, 5, 0]} castShadow>
-        <coneGeometry args={[1.2, 9, 4]} />
-        <meshStandardMaterial color="#b08a4a" />
+      {/* Obelisk of Theodosius */}
+      <mesh position={[0, 1.5, 0]} castShadow>
+        <boxGeometry args={[2, 2, 2]} />
+        <meshStandardMaterial color="#bda07a" />
       </mesh>
-      {/* serpent column (left) */}
-      <mesh position={[-25, 1.5, 0]} castShadow>
-        <cylinderGeometry args={[0.6, 0.8, 3, 12]} />
-        <meshStandardMaterial color="#3b6b3a" metalness={0.4} roughness={0.5} />
+      <mesh position={[0, 7, 0]} castShadow>
+        <coneGeometry args={[1.0, 10, 4]} />
+        <meshStandardMaterial color="#c8a463" />
       </mesh>
-      {/* statue podium (right) */}
-      <mesh position={[25, 2, 0]} castShadow>
-        <boxGeometry args={[2, 4, 2]} />
-        <meshStandardMaterial color="#e6dec6" />
-      </mesh>
-      <mesh position={[25, 5, 0]} castShadow>
-        <sphereGeometry args={[0.8, 16, 16]} />
-        <meshStandardMaterial color="#d8b46a" metalness={0.6} roughness={0.3} />
-      </mesh>
-      {/* dolphin lap markers */}
+      {/* Serpent column */}
+      <group position={[-25, 0, 0]}>
+        <mesh position={[0, 2, 0]} castShadow>
+          <cylinderGeometry args={[0.45, 0.7, 4, 16]} />
+          <meshStandardMaterial color="#3a6b3a" metalness={0.6} roughness={0.4} />
+        </mesh>
+        <mesh position={[0, 4.2, 0]} castShadow>
+          <sphereGeometry args={[0.6, 16, 16]} />
+          <meshStandardMaterial color="#4d8a4a" metalness={0.6} roughness={0.4} />
+        </mesh>
+      </group>
+      {/* Statue podium */}
+      <group position={[25, 0, 0]}>
+        <mesh position={[0, 2, 0]} castShadow>
+          <boxGeometry args={[2.4, 4, 2.4]} />
+          <meshStandardMaterial color="#efe5cc" />
+        </mesh>
+        <mesh position={[0, 5.2, 0]} castShadow>
+          <capsuleGeometry args={[0.6, 1.2, 6, 12]} />
+          <meshStandardMaterial color="#d8b46a" metalness={0.7} roughness={0.3} />
+        </mesh>
+      </group>
+      {/* Lap dolphins */}
       {[-2, -1, 0, 1, 2].map((i) => (
-        <mesh key={i} position={[i * 6, 1.2, -INNER_RY * 0.4]} castShadow>
-          <sphereGeometry args={[0.5, 12, 12]} />
+        <mesh key={i} position={[i * 6, 1.4, -INNER_RY * 0.4]} castShadow>
+          <sphereGeometry args={[0.45, 12, 12]} />
           <meshStandardMaterial color="#e6b94a" metalness={0.7} roughness={0.3} />
         </mesh>
+      ))}
+      {/* Decorative columns along spina */}
+      {[-40, -10, 10, 40].map((x) => (
+        <group key={x} position={[x, 0, 8]}>
+          <mesh position={[0, 1.5, 0]} castShadow>
+            <cylinderGeometry args={[0.3, 0.3, 3, 12]} />
+            <meshStandardMaterial color="#f1e7cf" />
+          </mesh>
+        </group>
+      ))}
+      {[-40, -10, 10, 40].map((x) => (
+        <group key={`b${x}`} position={[x, 0, -8]}>
+          <mesh position={[0, 1.5, 0]} castShadow>
+            <cylinderGeometry args={[0.3, 0.3, 3, 12]} />
+            <meshStandardMaterial color="#f1e7cf" />
+          </mesh>
+        </group>
       ))}
     </group>
   );
 }
 
+// Tiered stands ringing the track
 function Stands() {
-  // Outer ring of "stands" with a tinted color
-  const shape = useMemo(() => {
-    const s = new THREE.Shape();
-    const addRoundRect = (path: any, ry: number) => {
-      const w = STRAIGHT, h = ry;
-      path.moveTo(w, h);
-      path.absarc(w, 0, h, Math.PI / 2, -Math.PI / 2, true);
-      path.lineTo(-w, -h);
-      path.absarc(-w, 0, h, -Math.PI / 2, Math.PI / 2, true);
-      path.lineTo(w, h);
-    };
-    addRoundRect(s, OUTER_RY + 18);
-    const hole = new THREE.Path();
-    addRoundRect(hole, OUTER_RY + 0.5);
-    s.holes.push(hole);
-    return s;
-  }, []);
+  const tiers = [
+    { off: 2, h: 1.2, color: "#7b5a32" },
+    { off: 6, h: 2.4, color: "#6a4d2a" },
+    { off: 11, h: 3.8, color: "#5a4124" },
+    { off: 17, h: 5.6, color: "#4a361e" },
+  ];
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow>
-      <shapeGeometry args={[shape]} />
-      <meshStandardMaterial color="#5b4326" />
-    </mesh>
+    <group>
+      {tiers.map((t, i) => {
+        const shape = new THREE.Shape();
+        const addRoundRect = (path: any, ry: number) => {
+          const w = STRAIGHT, h = ry;
+          path.moveTo(w, h);
+          path.absarc(w, 0, h, Math.PI / 2, -Math.PI / 2, true);
+          path.lineTo(-w, -h);
+          path.absarc(-w, 0, h, -Math.PI / 2, Math.PI / 2, true);
+          path.lineTo(w, h);
+        };
+        addRoundRect(shape, OUTER_RY + t.off + 4);
+        const hole = new THREE.Path();
+        addRoundRect(hole, OUTER_RY + t.off);
+        shape.holes.push(hole);
+        return (
+          <mesh key={i} position={[0, t.h / 2, 0]} receiveShadow castShadow>
+            <extrudeGeometry args={[shape, { depth: t.h, bevelEnabled: false }]} />
+            <meshStandardMaterial color={t.color} />
+          </mesh>
+        );
+      })}
+      {/* Imperial Kathisma (royal box) on the south side */}
+      <group position={[0, 0, OUTER_RY + 22]}>
+        <mesh position={[0, 4, 0]} castShadow>
+          <boxGeometry args={[28, 8, 6]} />
+          <meshStandardMaterial color="#7a1d2a" />
+        </mesh>
+        <mesh position={[0, 9, 0]} castShadow>
+          <boxGeometry args={[30, 1, 7]} />
+          <meshStandardMaterial color="#d8b46a" metalness={0.6} roughness={0.3} />
+        </mesh>
+        {[-12, -6, 0, 6, 12].map((x) => (
+          <mesh key={x} position={[x, 4, -2.6]} castShadow>
+            <cylinderGeometry args={[0.4, 0.4, 8, 12]} />
+            <meshStandardMaterial color="#f1e7cf" />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
+// Crowd: many small instanced boxes around the stands; some sway and hold banners
+function Crowd() {
+  const ref = useRef<THREE.InstancedMesh>(null);
+  const colors = useRef<Float32Array | null>(null);
+  const count = 1400;
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+
+  const data = useMemo(() => {
+    const arr: { x: number; z: number; y: number; phase: number; tone: THREE.Color }[] = [];
+    const palette = [
+      new THREE.Color("#2a4a8a"),
+      new THREE.Color("#3a6a3a"),
+      new THREE.Color("#7a3a2a"),
+      new THREE.Color("#c9a14a"),
+      new THREE.Color("#5a4124"),
+      new THREE.Color("#a89876"),
+    ];
+    let i = 0;
+    while (i < count) {
+      // Place around oval, between OUTER_RY+2 and OUTER_RY+18
+      const angle = Math.random() * Math.PI * 2;
+      const tier = 2 + Math.random() * 16;
+      // Approximate oval radius using rounded-rect projection
+      const rx = STRAIGHT + tier;
+      const rz = OUTER_RY + tier;
+      // For a rounded rect, sample by mixing straight+arc
+      let x: number, z: number;
+      const w = STRAIGHT, h = OUTER_RY + tier;
+      // Pick between straights or arcs by angle bucket
+      const seg = Math.random();
+      if (seg < 0.35) {
+        x = (Math.random() * 2 - 1) * w;
+        z = h + Math.random() * 0.4;
+      } else if (seg < 0.7) {
+        x = (Math.random() * 2 - 1) * w;
+        z = -h - Math.random() * 0.4;
+      } else if (seg < 0.85) {
+        const a = (Math.random() - 0.5) * Math.PI;
+        x = w + Math.cos(a) * h;
+        z = Math.sin(a) * h;
+      } else {
+        const a = Math.PI / 2 + Math.random() * Math.PI;
+        x = -w + Math.cos(a) * h;
+        z = Math.sin(a) * h;
+      }
+      const y = 1.2 + tier * 0.32 + Math.random() * 0.3;
+      arr.push({
+        x,
+        z,
+        y,
+        phase: Math.random() * Math.PI * 2,
+        tone: palette[Math.floor(Math.random() * palette.length)],
+      });
+      i++;
+    }
+    return arr;
+  }, []);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    const c = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      c[i * 3] = data[i].tone.r;
+      c[i * 3 + 1] = data[i].tone.g;
+      c[i * 3 + 2] = data[i].tone.b;
+    }
+    colors.current = c;
+    ref.current.instanceColor = new THREE.InstancedBufferAttribute(c, 3);
+    for (let i = 0; i < count; i++) {
+      const d = data[i];
+      dummy.position.set(d.x, d.y, d.z);
+      dummy.scale.set(0.45, 1.0 + Math.random() * 0.4, 0.45);
+      dummy.updateMatrix();
+      ref.current.setMatrixAt(i, dummy.matrix);
+    }
+    ref.current.instanceMatrix.needsUpdate = true;
+  }, [data, dummy]);
+
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    const t = clock.getElapsedTime();
+    for (let i = 0; i < count; i += 7) {
+      const d = data[i];
+      const sway = Math.sin(t * 3 + d.phase) * 0.25;
+      dummy.position.set(d.x, d.y + sway, d.z);
+      dummy.rotation.y = Math.sin(t + d.phase) * 0.2;
+      dummy.scale.set(0.45, 1.0, 0.45);
+      dummy.updateMatrix();
+      ref.current.setMatrixAt(i, dummy.matrix);
+    }
+    ref.current.instanceMatrix.needsUpdate = true;
+  });
+
+  return (
+    <instancedMesh ref={ref} args={[undefined as any, undefined as any, count]} castShadow>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial vertexColors />
+    </instancedMesh>
+  );
+}
+
+// Banners hanging from the stands - blue & green for factions
+function Banners() {
+  const items = [];
+  for (let i = -2; i <= 2; i++) {
+    items.push({ x: i * 18, color: i % 2 === 0 ? "#2a78d6" : "#3aa84e", side: 1 });
+    items.push({ x: i * 18 + 6, color: i % 2 === 0 ? "#3aa84e" : "#2a78d6", side: -1 });
+  }
+  return (
+    <group>
+      {items.map((b, i) => (
+        <mesh key={i} position={[b.x, 6, b.side * (OUTER_RY + 18)]} castShadow>
+          <planeGeometry args={[3, 6]} />
+          <meshStandardMaterial color={b.color} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+    </group>
   );
 }
 
@@ -247,7 +385,7 @@ function ChariotMesh({ chariot }: { chariot: Chariot }) {
     const p = trackPosClean(chariot.t, chariot.lane);
     ref.current.position.set(p.x, 0, p.z);
     ref.current.rotation.y = p.angle;
-    const spin = chariot.speed * 200 * delta;
+    const spin = chariot.speed * 220 * delta;
     if (wheel1.current) wheel1.current.rotation.x += spin;
     if (wheel2.current) wheel2.current.rotation.x += spin;
   });
@@ -257,41 +395,55 @@ function ChariotMesh({ chariot }: { chariot: Chariot }) {
 
   return (
     <group ref={ref}>
-      {/* Two horses side by side */}
+      {/* Two horses side by side, in front of chariot (along +X local) */}
       {[-0.6, 0.6].map((dz) => (
-        <group key={dz} position={[1.6, 0.6, dz]}>
-          {/* body */}
+        <group key={dz} position={[1.8, 0.7, dz]}>
           <mesh castShadow>
             <boxGeometry args={[2.0, 0.7, 0.5]} />
             <meshStandardMaterial color="#3a2515" />
           </mesh>
+          {/* neck */}
+          <mesh position={[1.0, 0.35, 0]} rotation={[0, 0, -0.3]} castShadow>
+            <boxGeometry args={[0.35, 0.7, 0.35]} />
+            <meshStandardMaterial color="#321b0e" />
+          </mesh>
           {/* head */}
-          <mesh position={[1.2, 0.3, 0]} castShadow>
-            <boxGeometry args={[0.7, 0.5, 0.4]} />
+          <mesh position={[1.35, 0.55, 0]} castShadow>
+            <boxGeometry args={[0.6, 0.4, 0.35]} />
             <meshStandardMaterial color="#2c1c10" />
           </mesh>
           {/* legs */}
-          {[-0.8, 0.8].map((lx) => (
+          {[-0.7, 0.7].map((lx) => (
             <group key={lx}>
-              <mesh position={[lx, -0.5, -0.15]} castShadow>
-                <boxGeometry args={[0.18, 0.7, 0.18]} />
+              <mesh position={[lx, -0.55, -0.18]} castShadow>
+                <boxGeometry args={[0.18, 0.8, 0.18]} />
                 <meshStandardMaterial color="#2c1c10" />
               </mesh>
-              <mesh position={[lx, -0.5, 0.15]} castShadow>
-                <boxGeometry args={[0.18, 0.7, 0.18]} />
+              <mesh position={[lx, -0.55, 0.18]} castShadow>
+                <boxGeometry args={[0.18, 0.8, 0.18]} />
                 <meshStandardMaterial color="#2c1c10" />
               </mesh>
             </group>
           ))}
+          {/* tail */}
+          <mesh position={[-1.05, 0.1, 0]} castShadow>
+            <boxGeometry args={[0.3, 0.5, 0.2]} />
+            <meshStandardMaterial color="#1a0f06" />
+          </mesh>
         </group>
       ))}
+
+      {/* Yoke pole connecting horses to chariot */}
+      <mesh position={[0.6, 0.6, 0]} castShadow>
+        <boxGeometry args={[2.0, 0.1, 0.1]} />
+        <meshStandardMaterial color="#5a3a1f" />
+      </mesh>
 
       {/* Chariot body */}
       <mesh position={[-0.2, 0.7, 0]} castShadow>
         <boxGeometry args={[1.1, 0.9, 1.4]} />
         <meshStandardMaterial color={teamColor} metalness={0.3} roughness={0.5} />
       </mesh>
-      {/* Trim */}
       <mesh position={[-0.2, 1.2, 0]} castShadow>
         <boxGeometry args={[1.15, 0.1, 1.45]} />
         <meshStandardMaterial color="#e0b85a" metalness={0.7} roughness={0.3} />
@@ -307,23 +459,18 @@ function ChariotMesh({ chariot }: { chariot: Chariot }) {
         <meshStandardMaterial color="#1e1208" />
       </mesh>
 
-      {/* Driver */}
-      <mesh position={[-0.4, 1.6, 0]} castShadow>
-        <capsuleGeometry args={[0.3, 0.5, 4, 8]} />
-        <meshStandardMaterial color={teamGlow} />
-      </mesh>
-      {/* Helmet */}
-      <mesh position={[-0.4, 2.05, 0]} castShadow>
-        <sphereGeometry args={[0.22, 12, 12]} />
-        <meshStandardMaterial color="#c9a14a" metalness={0.7} roughness={0.3} />
-      </mesh>
-
-      {/* Player marker */}
-      {chariot.isPlayer && (
-        <mesh position={[-0.4, 3.4, 0]}>
-          <coneGeometry args={[0.4, 0.8, 4]} />
-          <meshStandardMaterial color="#f1c14a" emissive="#f1c14a" emissiveIntensity={0.6} />
-        </mesh>
+      {/* Driver - hidden for player so FPS view is clean */}
+      {!chariot.isPlayer && (
+        <>
+          <mesh position={[-0.4, 1.6, 0]} castShadow>
+            <capsuleGeometry args={[0.3, 0.5, 4, 8]} />
+            <meshStandardMaterial color={teamGlow} />
+          </mesh>
+          <mesh position={[-0.4, 2.05, 0]} castShadow>
+            <sphereGeometry args={[0.22, 12, 12]} />
+            <meshStandardMaterial color="#c9a14a" metalness={0.7} roughness={0.3} />
+          </mesh>
+        </>
       )}
     </group>
   );
@@ -338,25 +485,24 @@ function StartFinishLine() {
   );
 }
 
-// ---------- Camera + game logic ----------
-
-function CameraFollow({ chariotsRef }: { chariotsRef: React.MutableRefObject<Chariot[]> }) {
+// First-person camera locked to the player's chariot (driver view)
+function CameraFPS({ chariotsRef }: { chariotsRef: React.MutableRefObject<Chariot[]> }) {
   const { camera } = useThree();
-  const tmp = useRef(new THREE.Vector3());
-  const target = useRef(new THREE.Vector3());
+  const camPos = useRef(new THREE.Vector3());
+  const lookAt = useRef(new THREE.Vector3());
 
   useFrame(() => {
     const player = chariotsRef.current.find((c) => c.isPlayer);
     if (!player) return;
     const p = trackPosClean(player.t, player.lane);
-    // Camera behind chariot relative to its facing
-    const back = 9;
-    const cx = p.x - Math.cos(p.angle) * back;
-    const cz = p.z - Math.sin(p.angle) * back;
-    tmp.current.set(cx, 6, cz);
-    camera.position.lerp(tmp.current, 0.1);
-    target.current.set(p.x + Math.cos(p.angle) * 2, 1.2, p.z + Math.sin(p.angle) * 2);
-    camera.lookAt(target.current);
+    // Driver head position: slightly behind front of chariot, forward = (cos a, -sin a)
+    const fx = Math.cos(p.angle), fz = -Math.sin(p.angle);
+    const headX = p.x + fx * -0.2;
+    const headZ = p.z + fz * -0.2;
+    camPos.current.set(headX, 2.2, headZ);
+    camera.position.copy(camPos.current);
+    lookAt.current.set(headX + fx * 20, 1.6, headZ + fz * 20);
+    camera.lookAt(lookAt.current);
   });
   return null;
 }
@@ -366,17 +512,20 @@ function Loop({
   startedRef,
   keysRef,
   onFinish,
+  onStaminaChange,
 }: {
   chariotsRef: React.MutableRefObject<Chariot[]>;
   startedRef: React.MutableRefObject<boolean>;
   keysRef: React.MutableRefObject<Record<string, boolean>>;
   onFinish: (results: Chariot[]) => void;
+  onStaminaChange: (s: number) => void;
 }) {
   const finishCounter = useRef(0);
   const finishedFired = useRef(false);
+  const staminaSyncCounter = useRef(0);
 
   useFrame((_, deltaSec) => {
-    const dt = Math.min(0.05, deltaSec); // cap dt
+    const dt = Math.min(0.05, deltaSec);
     if (!startedRef.current) return;
 
     const chariots = chariotsRef.current;
@@ -386,13 +535,23 @@ function Loop({
 
       if (c.isPlayer) {
         const k = keysRef.current;
-        const whip = k["ArrowUp"] || k["w"] || k["W"];
+        const whip = (k["ArrowUp"] || k["w"] || k["W"]) && c.stamina > 0.02;
         const brake = k["ArrowDown"] || k["s"] || k["S"];
-        const left = k["ArrowLeft"] || k["a"] || k["A"];
-        const right = k["ArrowRight"] || k["d"] || k["D"];
+        // Reversed left/right per user request
+        const left = k["ArrowRight"] || k["d"] || k["D"];
+        const right = k["ArrowLeft"] || k["a"] || k["A"];
 
-        const target = whip ? c.baseSpeed * 1.25 : brake ? c.baseSpeed * 0.4 : c.baseSpeed * 0.9;
-        const accel = whip ? 0.04 : 0.025;
+        // Stamina: drains when whipping, regens otherwise
+        if (whip) {
+          c.stamina = Math.max(0, c.stamina - 0.18 * dt);
+        } else {
+          c.stamina = Math.min(1, c.stamina + 0.08 * dt);
+        }
+        // When stamina is depleted, max performance drops
+        const exhausted = c.stamina < 0.05;
+        const cruise = exhausted ? c.baseSpeed * 0.55 : c.baseSpeed * 0.92;
+        const target = whip ? c.baseSpeed * 1.3 : brake ? c.baseSpeed * 0.4 : cruise;
+        const accel = whip ? 0.05 : 0.025;
         if (c.speed < target) c.speed = Math.min(target, c.speed + accel * dt);
         else c.speed = Math.max(target, c.speed - accel * 0.6 * dt);
 
@@ -417,7 +576,7 @@ function Loop({
       }
     }
 
-    // Collision: slow trailing chariot if too close in same lane
+    // Collisions
     for (let i = 0; i < chariots.length; i++) {
       for (let j = 0; j < chariots.length; j++) {
         if (i === j) continue;
@@ -433,6 +592,14 @@ function Loop({
       }
     }
 
+    // Push stamina to React state at ~10Hz
+    staminaSyncCounter.current += dt;
+    if (staminaSyncCounter.current > 0.1) {
+      staminaSyncCounter.current = 0;
+      const player = chariots.find((c) => c.isPlayer);
+      if (player) onStaminaChange(player.stamina);
+    }
+
     if (!finishedFired.current && chariots.every((c) => c.finished)) {
       finishedFired.current = true;
       onFinish([...chariots].sort((x, y) => (x.finishOrder ?? 99) - (y.finishOrder ?? 99)));
@@ -441,8 +608,6 @@ function Loop({
 
   return null;
 }
-
-// ---------- Main React component ----------
 
 type Props = {
   team: Team;
@@ -455,6 +620,7 @@ export const Race3D = ({ team, onExit }: Props) => {
   const startedRef = useRef(false);
   const [countdown, setCountdown] = useState<number | string>(3);
   const [results, setResults] = useState<Chariot[] | null>(null);
+  const [stamina, setStamina] = useState(1);
   const [, force] = useState(0);
 
   useEffect(() => {
@@ -487,7 +653,7 @@ export const Race3D = ({ team, onExit }: Props) => {
   }, []);
 
   useEffect(() => {
-    const iv = setInterval(() => force((n) => n + 1), 200);
+    const iv = setInterval(() => force((n) => n + 1), 250);
     return () => clearInterval(iv);
   }, []);
 
@@ -501,39 +667,42 @@ export const Race3D = ({ team, onExit }: Props) => {
 
   return (
     <main className="relative h-screen w-screen overflow-hidden bg-background">
-      <Canvas shadows camera={{ position: [80, 50, 80], fov: 55 }}>
-        <Sky sunPosition={[100, 40, 100]} turbidity={6} rayleigh={2} />
-        <ambientLight intensity={0.55} />
+      <Canvas shadows camera={{ position: [80, 50, 80], fov: 75 }}>
+        <Sky sunPosition={[100, 40, 100]} turbidity={8} rayleigh={3} mieCoefficient={0.01} mieDirectionalG={0.85} />
+        <ambientLight intensity={0.5} />
         <directionalLight
-          position={[50, 80, 30]}
-          intensity={1.2}
+          position={[60, 90, 40]}
+          intensity={1.3}
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
-          shadow-camera-left={-120}
-          shadow-camera-right={120}
-          shadow-camera-top={120}
-          shadow-camera-bottom={-120}
+          shadow-camera-left={-140}
+          shadow-camera-right={140}
+          shadow-camera-top={140}
+          shadow-camera-bottom={-140}
         />
-        <fog attach="fog" args={["#d9c79a", 120, 280]} />
+        <fog attach="fog" args={["#d9c79a", 160, 360]} />
         <Ground />
         <Stands />
+        <Crowd />
+        <Banners />
         <Track />
         <Spina />
         <StartFinishLine />
         {chariots.map((c) => (
           <ChariotMesh key={c.id} chariot={c} />
         ))}
-        <CameraFollow chariotsRef={chariotsRef} />
+        <CameraFPS chariotsRef={chariotsRef} />
         <Loop
           chariotsRef={chariotsRef}
           startedRef={startedRef}
           keysRef={keysRef}
           onFinish={setResults}
+          onStaminaChange={setStamina}
         />
       </Canvas>
 
-      {/* HUD overlay */}
+      {/* HUD */}
       <div className="pointer-events-none absolute inset-0">
         <div className="pointer-events-auto absolute left-4 top-4 flex items-start gap-3">
           <div className="rounded-lg border border-gold/40 bg-background/80 px-4 py-3 font-imperial text-marble backdrop-blur">
@@ -546,6 +715,23 @@ export const Race3D = ({ team, onExit }: Props) => {
             </div>
             <div className="text-sm">
               Sıra <span className="text-gold">{playerPos}</span> / 8
+            </div>
+            <div className="mt-2">
+              <div className="text-[10px] uppercase tracking-[0.2em] text-gold">At Stamina</div>
+              <div className="mt-1 h-2 w-40 overflow-hidden rounded-sm border border-gold/40 bg-background/60">
+                <div
+                  className="h-full transition-[width] duration-100"
+                  style={{
+                    width: `${Math.round(stamina * 100)}%`,
+                    background:
+                      stamina > 0.4
+                        ? "linear-gradient(90deg,#3aa84e,#7be08e)"
+                        : stamina > 0.15
+                        ? "linear-gradient(90deg,#c9a14a,#f1c14a)"
+                        : "linear-gradient(90deg,#7a1d2a,#c63a3a)",
+                  }}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -583,8 +769,8 @@ export const Race3D = ({ team, onExit }: Props) => {
 
         <div className="pointer-events-none absolute bottom-4 left-4 rounded-lg border border-gold/40 bg-background/70 px-3 py-2 text-xs text-foreground/80 backdrop-blur">
           <p className="font-imperial uppercase tracking-widest text-gold">Kontroller</p>
-          <p>↑ Kırbaç · ↓ Dizginle</p>
-          <p>← → Şerit değiştir</p>
+          <p>↑ Kırbaç (stamina harcar) · ↓ Dizginle</p>
+          <p>← Sola · → Sağa</p>
         </div>
 
         {countdown !== "" && (
