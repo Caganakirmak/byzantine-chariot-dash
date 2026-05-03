@@ -79,7 +79,7 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
       t: -0.004 * (i * 2),
       lane: -0.6 + i * 0.2,
       speed: 0,
-      baseSpeed: 0.018 + Math.random() * 0.003,
+      baseSpeed: 0.022 + Math.random() * 0.004, // Increased from 0.018
       stamina: 1,
       isPlayer: team === "blue" && i === playerIdx,
       finished: false,
@@ -91,7 +91,7 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
       t: -0.004 * (i * 2 + 1),
       lane: -0.5 + i * 0.2,
       speed: 0,
-      baseSpeed: 0.018 + Math.random() * 0.003,
+      baseSpeed: 0.022 + Math.random() * 0.004, // Increased from 0.018
       stamina: 1,
       isPlayer: team === "green" && i === playerIdx,
       finished: false,
@@ -132,7 +132,27 @@ function Track() {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
       <shapeGeometry args={[shape]} />
-      <meshStandardMaterial color="#d6b079" roughness={1} />
+      <meshStandardMaterial 
+        color="#c8a860" 
+        roughness={0.8}
+        map={useMemo(() => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 256;
+          canvas.height = 256;
+          const ctx = canvas.getContext('2d')!;
+          // Sand texture
+          for (let i = 0; i < canvas.width; i++) {
+            for (let j = 0; j < canvas.height; j++) {
+              const shade = Math.random() * 20;
+              ctx.fillStyle = `rgb(${200 + shade}, ${168 + shade}, ${96 + shade})`;
+              ctx.fillRect(i, j, 1, 1);
+            }
+          }
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.magFilter = THREE.NearestFilter;
+          return texture;
+        }, [])}
+      />
     </mesh>
   );
 }
@@ -549,8 +569,9 @@ function Loop({
         }
         // When stamina is depleted, max performance drops
         const exhausted = c.stamina < 0.05;
-        const cruise = exhausted ? c.baseSpeed * 0.55 : c.baseSpeed * 0.92;
-        const target = whip ? c.baseSpeed * 1.3 : brake ? c.baseSpeed * 0.4 : cruise;
+        const staminaPenalty = Math.max(0.5, c.stamina); // Speed scales with stamina when low
+        const cruise = exhausted ? c.baseSpeed * 0.4 : c.baseSpeed * 0.92;
+        const target = whip ? c.baseSpeed * 1.3 * staminaPenalty : brake ? c.baseSpeed * 0.4 : cruise;
         const accel = whip ? 0.05 : 0.025;
         if (c.speed < target) c.speed = Math.min(target, c.speed + accel * dt);
         else c.speed = Math.max(target, c.speed - accel * 0.6 * dt);
@@ -558,11 +579,17 @@ function Loop({
         if (left) c.lane = Math.max(-1, c.lane - 0.9 * dt);
         if (right) c.lane = Math.min(1, c.lane + 0.9 * dt);
       } else {
-        const targetLane = -0.7 + Math.sin(c.t * 4 + c.id) * 0.25;
+        // AI: More aggressive and varied behavior
+        const targetLane = -0.5 + Math.sin(c.t * 4 + c.id) * 0.4; // More aggressive lane changes
         const diff = targetLane - c.lane;
-        c.lane += Math.sign(diff) * Math.min(0.5 * dt, Math.abs(diff));
-        const target = c.baseSpeed * (0.93 + Math.sin(performance.now() / 700 + c.id) * 0.05);
-        if (c.speed < target) c.speed = Math.min(target, c.speed + 0.025 * dt);
+        c.lane += Math.sign(diff) * Math.min(0.7 * dt, Math.abs(diff)); // Faster lane changes
+        
+        // AI stamina system - simulate fatigue
+        c.stamina = Math.max(0.3, Math.sin(performance.now() / 1200 + c.id) * 0.5 + 0.65);
+        const staminaPenalty = Math.max(0.6, c.stamina);
+        
+        const target = c.baseSpeed * (0.98 + Math.sin(performance.now() / 700 + c.id) * 0.08) * staminaPenalty;
+        if (c.speed < target) c.speed = Math.min(target, c.speed + 0.03 * dt);
       }
 
       const laneMult = 1 - (c.lane + 1) * 0.04;
@@ -576,18 +603,32 @@ function Loop({
       }
     }
 
-    // Collisions
+    // Advanced collision detection and response
     for (let i = 0; i < chariots.length; i++) {
-      for (let j = 0; j < chariots.length; j++) {
-        if (i === j) continue;
-        const a = chariots[i], b = chariots[j];
+      for (let j = i + 1; j < chariots.length; j++) {
+        const a = chariots[i];
+        const b = chariots[j];
         if (a.finished || b.finished) continue;
-        const d = (a.t % 1) - (b.t % 1);
-        if (Math.abs(d) < 0.008 && Math.abs(a.lane - b.lane) < 0.3) {
-          if (d < 0) {
-            a.speed *= 0.97;
-            a.lane += (a.lane < b.lane ? -0.4 : 0.4) * dt;
+        
+        const tDiff = Math.abs((a.t % 1) - (b.t % 1));
+        const laneDiff = Math.abs(a.lane - b.lane);
+        
+        // More restrictive collision zones
+        if (tDiff < 0.05 && laneDiff < 0.35) {
+          // Push chariots apart to prevent overlapping
+          const repulsion = 0.3;
+          if (a.lane < b.lane) {
+            a.lane = Math.max(-1, a.lane - repulsion * dt);
+            b.lane = Math.min(1, b.lane + repulsion * dt);
+          } else {
+            a.lane = Math.min(1, a.lane + repulsion * dt);
+            b.lane = Math.max(-1, b.lane - repulsion * dt);
           }
+          
+          // Slow down chariots on collision
+          const collisionSlow = 0.92;
+          a.speed *= collisionSlow;
+          b.speed *= collisionSlow;
         }
       }
     }
