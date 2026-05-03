@@ -123,3 +123,19 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  .font-imperial {
+    font-family: 'Cinzel', 'Trajan Pro', Georgia, serif;
+    letter-spacing: 0.05em;
+  }
+  .text-shadow-gold {
+    text-shadow: 0 2px 12px hsl(var(--gold) / 0.6), 0 0 4px hsl(0 0% 0% / 0.8);
+  }
+  .bg-arena {
+    background: var(--gradient-arena);
+  }
+  .bg-imperial {
+    background: var(--gradient-imperial);
+  }
+}
