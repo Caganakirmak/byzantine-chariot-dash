@@ -57,6 +57,21 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        "team-blue": {
+          DEFAULT: "hsl(var(--team-blue))",
+          glow: "hsl(var(--team-blue-glow))",
+        },
+        "team-green": {
+          DEFAULT: "hsl(var(--team-green))",
+          glow: "hsl(var(--team-green-glow))",
+        },
+        gold: {
+          DEFAULT: "hsl(var(--gold))",
+          glow: "hsl(var(--gold-glow))",
+        },
+        sand: "hsl(var(--sand))",
+        marble: "hsl(var(--marble))",
+        blood: "hsl(var(--blood))",
       },
       borderRadius: {
         lg: "var(--radius)",

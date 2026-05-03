@@ -8,8 +8,9 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Byzantine palette */
+    --background: 36 30% 8%;
+    --foreground: 42 65% 88%;
 
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
@@ -53,6 +54,25 @@ All colors MUST be HSL.
     --sidebar-border: 220 13% 91%;
 
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --team-blue: 212 80% 48%;
+    --team-blue-glow: 205 95% 62%;
+    --team-green: 145 70% 38%;
+    --team-green-glow: 140 75% 50%;
+    --gold: 42 90% 55%;
+    --gold-glow: 45 95% 65%;
+    --sand: 36 45% 62%;
+    --sand-dark: 30 35% 38%;
+    --marble: 40 25% 88%;
+    --blood: 0 70% 38%;
+
+    --gradient-imperial: linear-gradient(135deg, hsl(var(--gold)) 0%, hsl(36 60% 35%) 100%);
+    --gradient-blue-team: linear-gradient(135deg, hsl(var(--team-blue)) 0%, hsl(var(--team-blue-glow)) 100%);
+    --gradient-green-team: linear-gradient(135deg, hsl(var(--team-green)) 0%, hsl(var(--team-green-glow)) 100%);
+    --gradient-arena: radial-gradient(ellipse at center, hsl(var(--sand)) 0%, hsl(var(--sand-dark)) 100%);
+
+    --shadow-imperial: 0 10px 40px -10px hsl(var(--gold) / 0.5);
+    --shadow-deep: 0 20px 60px -20px hsl(0 0% 0% / 0.7);
   }
 
   .dark {
@@ -101,5 +121,21 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .font-imperial {
+    font-family: 'Cinzel', 'Trajan Pro', Georgia, serif;
+    letter-spacing: 0.05em;
+  }
+  .text-shadow-gold {
+    text-shadow: 0 2px 12px hsl(var(--gold) / 0.6), 0 0 4px hsl(0 0% 0% / 0.8);
+  }
+  .bg-arena {
+    background: var(--gradient-arena);
+  }
+  .bg-imperial {
+    background: var(--gradient-imperial);
   }
 }
