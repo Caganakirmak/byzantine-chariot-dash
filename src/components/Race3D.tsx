@@ -561,35 +561,41 @@ function Loop({
         const left = k["ArrowRight"] || k["d"] || k["D"];
         const right = k["ArrowLeft"] || k["a"] || k["A"];
 
-        // Stamina: drains when whipping, regens otherwise
+        // Stamina: drains faster when whipping, regens slower
         if (whip) {
-          c.stamina = Math.max(0, c.stamina - 0.18 * dt);
+          c.stamina = Math.max(0, c.stamina - 0.13 * dt);
         } else {
-          c.stamina = Math.min(1, c.stamina + 0.08 * dt);
+          c.stamina = Math.min(1, c.stamina + 0.05 * dt);
         }
-        // When stamina is depleted, max performance drops
         const exhausted = c.stamina < 0.05;
-        const staminaPenalty = Math.max(0.5, c.stamina); // Speed scales with stamina when low
-        const cruise = exhausted ? c.baseSpeed * 0.4 : c.baseSpeed * 0.92;
-        const target = whip ? c.baseSpeed * 1.3 * staminaPenalty : brake ? c.baseSpeed * 0.4 : cruise;
-        const accel = whip ? 0.05 : 0.025;
+        const staminaPenalty = Math.max(0.55, c.stamina);
+        const cruise = exhausted ? c.baseSpeed * 0.45 : c.baseSpeed * 0.88;
+        const target = whip ? c.baseSpeed * 1.22 * staminaPenalty : brake ? c.baseSpeed * 0.4 : cruise;
+        const accel = whip ? 0.035 : 0.02;
         if (c.speed < target) c.speed = Math.min(target, c.speed + accel * dt);
         else c.speed = Math.max(target, c.speed - accel * 0.6 * dt);
 
         if (left) c.lane = Math.max(-1, c.lane - 0.9 * dt);
         if (right) c.lane = Math.min(1, c.lane + 0.9 * dt);
       } else {
-        // AI: More aggressive and varied behavior
-        const targetLane = -0.5 + Math.sin(c.t * 4 + c.id) * 0.4; // More aggressive lane changes
+        // Smarter AI with rubber-banding so it stays competitive
+        const player = chariots.find((pl) => pl.isPlayer);
+        const playerT = player ? player.t : c.t;
+        const gap = c.t - playerT; // negative => behind player
+        // Behind: small boost; ahead: small drag
+        const rubber = gap < 0 ? 1 + Math.min(0.18, -gap * 1.4) : 1 - Math.min(0.08, gap * 1.0);
+
+        const targetLane = -0.5 + Math.sin(c.t * 4 + c.id) * 0.4;
         const diff = targetLane - c.lane;
-        c.lane += Math.sign(diff) * Math.min(0.7 * dt, Math.abs(diff)); // Faster lane changes
-        
-        // AI stamina system - simulate fatigue
-        c.stamina = Math.max(0.3, Math.sin(performance.now() / 1200 + c.id) * 0.5 + 0.65);
-        const staminaPenalty = Math.max(0.6, c.stamina);
-        
-        const target = c.baseSpeed * (0.98 + Math.sin(performance.now() / 700 + c.id) * 0.08) * staminaPenalty;
-        if (c.speed < target) c.speed = Math.min(target, c.speed + 0.03 * dt);
+        c.lane += Math.sign(diff) * Math.min(0.7 * dt, Math.abs(diff));
+
+        // AI stamina-like oscillation
+        c.stamina = Math.max(0.35, Math.sin(performance.now() / 1200 + c.id) * 0.4 + 0.7);
+        const staminaPenalty = Math.max(0.7, c.stamina);
+
+        const target = c.baseSpeed * (1.0 + Math.sin(performance.now() / 700 + c.id) * 0.06) * staminaPenalty * rubber;
+        if (c.speed < target) c.speed = Math.min(target, c.speed + 0.035 * dt);
+        else c.speed = Math.max(target, c.speed - 0.02 * dt);
       }
 
       const laneMult = 1 - (c.lane + 1) * 0.04;
@@ -603,32 +609,45 @@ function Loop({
       }
     }
 
-    // Advanced collision detection and response
+    // Solid-body collision: prevent chariots from passing through each other
     for (let i = 0; i < chariots.length; i++) {
       for (let j = i + 1; j < chariots.length; j++) {
         const a = chariots[i];
         const b = chariots[j];
         if (a.finished || b.finished) continue;
-        
-        const tDiff = Math.abs((a.t % 1) - (b.t % 1));
-        const laneDiff = Math.abs(a.lane - b.lane);
-        
-        // More restrictive collision zones
-        if (tDiff < 0.05 && laneDiff < 0.35) {
-          // Push chariots apart to prevent overlapping
-          const repulsion = 0.3;
-          if (a.lane < b.lane) {
-            a.lane = Math.max(-1, a.lane - repulsion * dt);
-            b.lane = Math.min(1, b.lane + repulsion * dt);
+
+        // signed gap on track (in t units, accounting for wrap)
+        let dt2 = a.t - b.t;
+        // only consider when on same lap-ish region
+        if (Math.abs(dt2) > 0.5) continue;
+        const laneDiff = a.lane - b.lane;
+        const absLane = Math.abs(laneDiff);
+        const absT = Math.abs(dt2);
+
+        // chariot footprint thresholds (t ~ progress around track)
+        const T_THRESH = 0.012;
+        const LANE_THRESH = 0.32;
+
+        if (absT < T_THRESH && absLane < LANE_THRESH) {
+          // Lateral push apart
+          const lanePush = (LANE_THRESH - absLane) * 0.5;
+          if (laneDiff >= 0) {
+            a.lane = Math.min(1, a.lane + lanePush);
+            b.lane = Math.max(-1, b.lane - lanePush);
           } else {
-            a.lane = Math.min(1, a.lane + repulsion * dt);
-            b.lane = Math.max(-1, b.lane - repulsion * dt);
+            a.lane = Math.max(-1, a.lane - lanePush);
+            b.lane = Math.min(1, b.lane + lanePush);
           }
-          
-          // Slow down chariots on collision
-          const collisionSlow = 0.92;
-          a.speed *= collisionSlow;
-          b.speed *= collisionSlow;
+
+          // Longitudinal: trailing chariot is blocked, leading one barely affected
+          if (dt2 >= 0) {
+            // a is ahead
+            b.t = a.t - T_THRESH;
+            b.speed = Math.min(b.speed, a.speed * 0.92);
+          } else {
+            a.t = b.t - T_THRESH;
+            a.speed = Math.min(a.speed, b.speed * 0.92);
+          }
         }
       }
     }
