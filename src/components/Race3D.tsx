@@ -502,7 +502,7 @@ function ChariotMesh({ chariot }: { chariot: Chariot }) {
 
       {/* Yoke pole connecting horses to chariot */}
       <mesh position={[0.6, 0.6, 0]} castShadow>
-        <boxGeometry args={[2.0, 0.1, 0.1]} />
+        <boxGeometry args={[2.0, 0.1, 4.4]} />
         <meshStandardMaterial color="#5a3a1f" />
       </mesh>
 
