@@ -79,7 +79,7 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
       t: -0.004 * (i * 2),
       lane: -0.6 + i * 0.2,
       speed: 0,
-      baseSpeed: 0.022 + Math.random() * 0.004, // Increased from 0.018
+      baseSpeed: 0.024 + Math.random() * 0.005,
       stamina: 1,
       isPlayer: team === "blue" && i === playerIdx,
       finished: false,
@@ -91,7 +91,7 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
       t: -0.004 * (i * 2 + 1),
       lane: -0.5 + i * 0.2,
       speed: 0,
-      baseSpeed: 0.022 + Math.random() * 0.004, // Increased from 0.018
+      baseSpeed: 0.024 + Math.random() * 0.005,
       stamina: 1,
       isPlayer: team === "green" && i === playerIdx,
       finished: false,
