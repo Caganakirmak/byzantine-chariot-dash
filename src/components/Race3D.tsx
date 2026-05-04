@@ -462,8 +462,8 @@ function ChariotMesh({ chariot }: { chariot: Chariot }) {
 
   return (
     <group ref={ref}>
-      {/* Two horses side by side, in front of chariot (along +X local) */}
-      {[-0.6, 0.6].map((dz) => (
+      {/* Quadriga: four horses abreast, in front of chariot (along +X local) */}
+      {[-1.65, -0.55, 0.55, 1.65].map((dz) => (
         <group key={dz} position={[1.8, 0.7, dz]}>
           <mesh castShadow>
             <boxGeometry args={[2.0, 0.7, 0.5]} />
@@ -502,7 +502,7 @@ function ChariotMesh({ chariot }: { chariot: Chariot }) {
 
       {/* Yoke pole connecting horses to chariot */}
       <mesh position={[0.6, 0.6, 0]} castShadow>
-        <boxGeometry args={[2.0, 0.1, 0.1]} />
+        <boxGeometry args={[2.0, 0.1, 4.4]} />
         <meshStandardMaterial color="#5a3a1f" />
       </mesh>
 
