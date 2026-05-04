@@ -975,7 +975,7 @@ export const Race3D = ({ team, onExit }: Props) => {
 
         <div className="pointer-events-none absolute bottom-4 left-4 rounded-lg border border-gold/40 bg-background/70 px-3 py-2 text-xs text-foreground/80 backdrop-blur">
           <p className="font-imperial uppercase tracking-widest text-gold">Kontroller</p>
-          <p>↑ Kırbaç (stamina harcar) · ↓ Dizginle</p>
+          <p>↑ Kırbaç & Boost (stamina harcar) · ↓ Dizginle</p>
           <p>← Sola · → Sağa</p>
         </div>
 
