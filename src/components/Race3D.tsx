@@ -579,13 +579,13 @@ function Loop({
   startedRef,
   keysRef,
   onFinish,
-  onStaminaChange,
+  onStatsChange,
 }: {
   chariotsRef: React.MutableRefObject<Chariot[]>;
   startedRef: React.MutableRefObject<boolean>;
   keysRef: React.MutableRefObject<Record<string, boolean>>;
   onFinish: (results: Chariot[]) => void;
-  onStaminaChange: (s: number) => void;
+  onStatsChange: (s: { stamina: number; hp: number; speed: number; boostTimer: number; boostCooldown: number; wrecked: boolean }) => void;
 }) {
   const finishCounter = useRef(0);
   const finishedFired = useRef(false);
