@@ -600,16 +600,43 @@ function Loop({
     for (const c of chariots) {
       if (c.finished) continue;
 
+      // Tick boost timers
+      if (c.boostTimer > 0) c.boostTimer = Math.max(0, c.boostTimer - dt);
+      if (c.boostCooldown > 0) c.boostCooldown = Math.max(0, c.boostCooldown - dt);
+
+      // Wrecked: massive slowdown, recover slowly
+      if (c.wrecked) {
+        c.speed = Math.max(0, c.speed - 0.06 * dt);
+        // hp slowly self-repairs back from 0 enough to limp
+        c.hp = Math.min(0.25, c.hp + 0.02 * dt);
+        if (c.hp >= 0.2) c.wrecked = false;
+        c.t += c.speed * dt;
+        continue;
+      }
+
+      // HP-based speed cap (damage slows the chariot)
+      const hpPenalty = c.hp < 0.4 ? 0.55 + c.hp : 1; // <0.4 hp -> noticeable slowdown
+      const boosting = c.boostTimer > 0;
+
       if (c.isPlayer) {
         const k = keysRef.current;
-        const whip = (k["ArrowUp"] || k["w"] || k["W"]) && c.stamina > 0.02;
+        const whipHeld = (k["ArrowUp"] || k["w"] || k["W"]) && c.stamina > 0.02;
+        const whipEdge = whipHeld && !c.whipPrev;
+        c.whipPrev = whipHeld;
         const brake = k["ArrowDown"] || k["s"] || k["S"];
         // Reversed left/right per user request
         const left = k["ArrowRight"] || k["d"] || k["D"];
         const right = k["ArrowLeft"] || k["a"] || k["A"];
 
-        // Stamina: drains faster when whipping, regens slower
-        if (whip) {
+        // Whip press triggers a short boost if cooldown ready and stamina sufficient
+        if (whipEdge && c.boostCooldown <= 0 && c.stamina > BOOST_STAMINA_COST) {
+          c.boostTimer = BOOST_DURATION;
+          c.boostCooldown = BOOST_COOLDOWN;
+          c.stamina = Math.max(0, c.stamina - BOOST_STAMINA_COST);
+        }
+
+        // Held whip drains stamina gradually
+        if (whipHeld) {
           c.stamina = Math.max(0, c.stamina - 0.13 * dt);
         } else {
           c.stamina = Math.min(1, c.stamina + 0.05 * dt);
@@ -617,31 +644,45 @@ function Loop({
         const exhausted = c.stamina < 0.05;
         const staminaPenalty = Math.max(0.55, c.stamina);
         const cruise = exhausted ? c.baseSpeed * 0.45 : c.baseSpeed * 0.88;
-        const target = whip ? c.baseSpeed * 1.22 * staminaPenalty : brake ? c.baseSpeed * 0.4 : cruise;
-        const accel = whip ? 0.035 : 0.02;
+        let target = whipHeld ? c.baseSpeed * 1.22 * staminaPenalty : brake ? c.baseSpeed * 0.4 : cruise;
+        if (c.boostTimer > 0) target = c.baseSpeed * 1.55;
+        target *= hpPenalty;
+        const accel = c.boostTimer > 0 ? 0.06 : whipHeld ? 0.035 : 0.02;
         if (c.speed < target) c.speed = Math.min(target, c.speed + accel * dt);
         else c.speed = Math.max(target, c.speed - accel * 0.6 * dt);
 
         if (left) c.lane = Math.max(-1, c.lane - 0.9 * dt);
         if (right) c.lane = Math.min(1, c.lane + 0.9 * dt);
       } else {
-        // Smarter AI with rubber-banding so it stays competitive
         const player = chariots.find((pl) => pl.isPlayer);
         const playerT = player ? player.t : c.t;
-        const gap = c.t - playerT; // negative => behind player
-        // Behind: small boost; ahead: small drag
+        const gap = c.t - playerT;
         const rubber = gap < 0 ? 1 + Math.min(0.18, -gap * 1.4) : 1 - Math.min(0.08, gap * 1.0);
 
         const targetLane = -0.5 + Math.sin(c.t * 4 + c.id) * 0.4;
         const diff = targetLane - c.lane;
         c.lane += Math.sign(diff) * Math.min(0.7 * dt, Math.abs(diff));
 
-        // AI stamina-like oscillation
-        c.stamina = Math.max(0.35, Math.sin(performance.now() / 1200 + c.id) * 0.4 + 0.7);
-        const staminaPenalty = Math.max(0.7, c.stamina);
+        // AI stamina dynamics
+        const staminaDrain = c.boostTimer > 0 ? 0.18 : 0.04;
+        const staminaRegen = 0.06;
+        c.stamina = Math.max(0, Math.min(1, c.stamina + (c.boostTimer > 0 ? -staminaDrain : staminaRegen) * dt));
 
-        const target = c.baseSpeed * (1.0 + Math.sin(performance.now() / 700 + c.id) * 0.06) * staminaPenalty * rubber;
-        if (c.speed < target) c.speed = Math.min(target, c.speed + 0.035 * dt);
+        // AI decides to boost: if behind player or randomly, with cooldown & stamina
+        if (c.boostCooldown <= 0 && c.stamina > BOOST_STAMINA_COST + 0.1) {
+          const wantBoost = (gap < -0.02 && Math.random() < 0.012) || Math.random() < 0.003;
+          if (wantBoost) {
+            c.boostTimer = BOOST_DURATION;
+            c.boostCooldown = BOOST_COOLDOWN + Math.random() * 1.5;
+            c.stamina = Math.max(0, c.stamina - BOOST_STAMINA_COST);
+          }
+        }
+
+        const staminaPenalty = Math.max(0.7, c.stamina);
+        let target = c.baseSpeed * (1.0 + Math.sin(performance.now() / 700 + c.id) * 0.06) * staminaPenalty * rubber;
+        if (c.boostTimer > 0) target = c.baseSpeed * 1.5;
+        target *= hpPenalty;
+        if (c.speed < target) c.speed = Math.min(target, c.speed + (c.boostTimer > 0 ? 0.06 : 0.035) * dt);
         else c.speed = Math.max(target, c.speed - 0.02 * dt);
       }
 
@@ -656,27 +697,23 @@ function Loop({
       }
     }
 
-    // Solid-body collision: prevent chariots from passing through each other
+    // Solid-body collision + damage
     for (let i = 0; i < chariots.length; i++) {
       for (let j = i + 1; j < chariots.length; j++) {
         const a = chariots[i];
         const b = chariots[j];
         if (a.finished || b.finished) continue;
 
-        // signed gap on track (in t units, accounting for wrap)
         let dt2 = a.t - b.t;
-        // only consider when on same lap-ish region
         if (Math.abs(dt2) > 0.5) continue;
         const laneDiff = a.lane - b.lane;
         const absLane = Math.abs(laneDiff);
         const absT = Math.abs(dt2);
 
-        // chariot footprint thresholds (t ~ progress around track)
         const T_THRESH = 0.012;
         const LANE_THRESH = 0.32;
 
         if (absT < T_THRESH && absLane < LANE_THRESH) {
-          // Lateral push apart
           const lanePush = (LANE_THRESH - absLane) * 0.5;
           if (laneDiff >= 0) {
             a.lane = Math.min(1, a.lane + lanePush);
@@ -686,9 +723,15 @@ function Loop({
             b.lane = Math.min(1, b.lane + lanePush);
           }
 
-          // Longitudinal: trailing chariot is blocked, leading one barely affected
+          // Damage proportional to relative speed
+          const relSpeed = Math.abs(a.speed - b.speed) + 0.005;
+          const dmg = Math.min(0.05, relSpeed * 0.9) + 0.004;
+          a.hp = Math.max(0, a.hp - dmg);
+          b.hp = Math.max(0, b.hp - dmg);
+          if (a.hp <= 0 && !a.wrecked) { a.wrecked = true; a.speed *= 0.2; }
+          if (b.hp <= 0 && !b.wrecked) { b.wrecked = true; b.speed *= 0.2; }
+
           if (dt2 >= 0) {
-            // a is ahead
             b.t = a.t - T_THRESH;
             b.speed = Math.min(b.speed, a.speed * 0.92);
           } else {
@@ -699,7 +742,6 @@ function Loop({
       }
     }
 
-    // Push stamina to React state at ~10Hz
     staminaSyncCounter.current += dt;
     if (staminaSyncCounter.current > 0.1) {
       staminaSyncCounter.current = 0;
