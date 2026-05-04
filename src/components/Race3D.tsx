@@ -776,7 +776,7 @@ export const Race3D = ({ team, onExit }: Props) => {
   const startedRef = useRef(false);
   const [countdown, setCountdown] = useState<number | string>(3);
   const [results, setResults] = useState<Chariot[] | null>(null);
-  const [stamina, setStamina] = useState(1);
+  const [stats, setStats] = useState({ stamina: 1, hp: 1, speed: 0, boostTimer: 0, boostCooldown: 0, wrecked: false });
   const [, force] = useState(0);
 
   useEffect(() => {
