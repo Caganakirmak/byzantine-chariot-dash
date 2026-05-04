@@ -773,6 +773,8 @@ export const Race3D = ({ team, onExit }: Props) => {
         <Crowd />
         <Banners />
         <Track />
+        <InnerCurb />
+
         <Spina />
         <StartFinishLine />
         {chariots.map((c) => (
