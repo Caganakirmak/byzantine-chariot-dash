@@ -106,7 +106,33 @@ function Ground() {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} receiveShadow>
       <planeGeometry args={[600, 600]} />
-      <meshStandardMaterial color="#3a2a18" />
+      <meshStandardMaterial color="#5a4a32" roughness={1} />
+    </mesh>
+  );
+}
+
+// Marble curb hugging the inner spina edge
+function InnerCurb() {
+  const shape = useMemo(() => {
+    const s = new THREE.Shape();
+    const addRoundRect = (path: any, ry: number) => {
+      const w = STRAIGHT, h = ry;
+      path.moveTo(w, h);
+      path.absarc(w, 0, h, Math.PI / 2, -Math.PI / 2, true);
+      path.lineTo(-w, -h);
+      path.absarc(-w, 0, h, -Math.PI / 2, Math.PI / 2, true);
+      path.lineTo(w, h);
+    };
+    addRoundRect(s, INNER_RY + 0.6);
+    const hole = new THREE.Path();
+    addRoundRect(hole, INNER_RY);
+    s.holes.push(hole);
+    return s;
+  }, []);
+  return (
+    <mesh position={[0, 0.15, 0]} receiveShadow castShadow>
+      <extrudeGeometry args={[shape, { depth: 0.3, bevelEnabled: false }]} />
+      <meshStandardMaterial color="#f3ead2" roughness={0.6} />
     </mesh>
   );
 }
