@@ -14,13 +14,21 @@ type Chariot = {
   lane: number;
   speed: number;
   baseSpeed: number;
-  stamina: number; // 0..1, only used by player meaningfully
+  stamina: number; // 0..1
+  hp: number; // 0..1 durability
+  boostTimer: number; // seconds remaining of boost
+  boostCooldown: number; // seconds until next boost allowed
+  whipPrev: boolean; // for AI/player edge detection
+  wrecked: boolean;
   isPlayer: boolean;
   finished: boolean;
   finishOrder?: number;
 };
 
-const TOTAL_LAPS = 3;
+const TOTAL_LAPS = 12;
+const BOOST_DURATION = 1.6;
+const BOOST_COOLDOWN = 3.5;
+const BOOST_STAMINA_COST = 0.28;
 
 // Track geometry
 const STRAIGHT = 60;
