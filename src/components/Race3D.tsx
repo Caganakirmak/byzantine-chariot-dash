@@ -130,8 +130,8 @@ function InnerCurb() {
     return s;
   }, []);
   return (
-    <mesh position={[0, 0.15, 0]} receiveShadow castShadow>
-      <extrudeGeometry args={[shape, { depth: 0.3, bevelEnabled: false }]} />
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]} receiveShadow castShadow>
+      <extrudeGeometry args={[shape, { depth: 0.4, bevelEnabled: false }]} />
       <meshStandardMaterial color="#f3ead2" roughness={0.6} />
     </mesh>
   );
