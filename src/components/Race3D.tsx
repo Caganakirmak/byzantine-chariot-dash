@@ -856,7 +856,7 @@ export const Race3D = ({ team, onExit }: Props) => {
           startedRef={startedRef}
           keysRef={keysRef}
           onFinish={setResults}
-          onStaminaChange={setStamina}
+          onStatsChange={setStats}
         />
       </Canvas>
 
@@ -874,19 +874,67 @@ export const Race3D = ({ team, onExit }: Props) => {
             <div className="text-sm">
               Sıra <span className="text-gold">{playerPos}</span> / 8
             </div>
+
+            {/* Speed */}
+            <div className="mt-2 text-sm">
+              Hız <span className="text-gold">{Math.round(stats.speed * 4200)}</span>
+              <span className="text-foreground/60"> stadia/h</span>
+            </div>
+
+            {/* Stamina */}
             <div className="mt-2">
               <div className="text-[10px] uppercase tracking-[0.2em] text-gold">At Stamina</div>
-              <div className="mt-1 h-2 w-40 overflow-hidden rounded-sm border border-gold/40 bg-background/60">
+              <div className="mt-1 h-2 w-44 overflow-hidden rounded-sm border border-gold/40 bg-background/60">
                 <div
                   className="h-full transition-[width] duration-100"
                   style={{
-                    width: `${Math.round(stamina * 100)}%`,
+                    width: `${Math.round(stats.stamina * 100)}%`,
                     background:
-                      stamina > 0.4
+                      stats.stamina > 0.4
                         ? "linear-gradient(90deg,#3aa84e,#7be08e)"
-                        : stamina > 0.15
+                        : stats.stamina > 0.15
                         ? "linear-gradient(90deg,#c9a14a,#f1c14a)"
                         : "linear-gradient(90deg,#7a1d2a,#c63a3a)",
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Durability / HP */}
+            <div className="mt-2">
+              <div className="text-[10px] uppercase tracking-[0.2em] text-gold">Araç Sağlamlığı</div>
+              <div className="mt-1 h-2 w-44 overflow-hidden rounded-sm border border-gold/40 bg-background/60">
+                <div
+                  className="h-full transition-[width] duration-100"
+                  style={{
+                    width: `${Math.round(stats.hp * 100)}%`,
+                    background:
+                      stats.hp > 0.5
+                        ? "linear-gradient(90deg,#5a9ad6,#a8d4ff)"
+                        : stats.hp > 0.2
+                        ? "linear-gradient(90deg,#c9a14a,#f1c14a)"
+                        : "linear-gradient(90deg,#7a1d2a,#c63a3a)",
+                  }}
+                />
+              </div>
+              {stats.wrecked && (
+                <div className="mt-1 text-xs font-bold text-red-400">ARAÇ PARÇALANDI!</div>
+              )}
+            </div>
+
+            {/* Boost */}
+            <div className="mt-2">
+              <div className="text-[10px] uppercase tracking-[0.2em] text-gold">Kırbaç Boost</div>
+              <div className="mt-1 h-2 w-44 overflow-hidden rounded-sm border border-gold/40 bg-background/60">
+                <div
+                  className="h-full transition-[width] duration-100"
+                  style={{
+                    width: stats.boostTimer > 0
+                      ? `${Math.round((stats.boostTimer / BOOST_DURATION) * 100)}%`
+                      : `${Math.round((1 - stats.boostCooldown / BOOST_COOLDOWN) * 100)}%`,
+                    background: stats.boostTimer > 0
+                      ? "linear-gradient(90deg,#f1c14a,#fff1a8)"
+                      : "linear-gradient(90deg,#5a4124,#c9a14a)",
                   }}
                 />
               </div>
