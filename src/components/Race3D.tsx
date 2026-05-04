@@ -743,10 +743,17 @@ function Loop({
     }
 
     staminaSyncCounter.current += dt;
-    if (staminaSyncCounter.current > 0.1) {
+    if (staminaSyncCounter.current > 0.08) {
       staminaSyncCounter.current = 0;
       const player = chariots.find((c) => c.isPlayer);
-      if (player) onStaminaChange(player.stamina);
+      if (player) onStatsChange({
+        stamina: player.stamina,
+        hp: player.hp,
+        speed: player.speed,
+        boostTimer: player.boostTimer,
+        boostCooldown: player.boostCooldown,
+        wrecked: player.wrecked,
+      });
     }
 
     if (!finishedFired.current && chariots.every((c) => c.finished)) {
