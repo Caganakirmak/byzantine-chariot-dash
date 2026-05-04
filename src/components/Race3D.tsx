@@ -79,16 +79,24 @@ const GREEN_NAMES = ["Faustinus", "Anastasios", "Belisarios", "Mauricius"];
 function makeChariots(team: Team, playerIdx: number): Chariot[] {
   const list: Chariot[] = [];
   let id = 0;
+  // Starting grid: 4 rows × 2 cols (Blue left, Green right), placed BEFORE the start/finish line
+  // t < 0 means they're approaching the line from the back of the hippodrome
   for (let i = 0; i < 4; i++) {
+    const rowOffset = -0.055 + i * 0.012; // rows staggered along straight
     list.push({
       id: id++,
       team: "blue",
       name: BLUE_NAMES[i],
-      t: -0.004 * (i * 2),
-      lane: -0.6 + i * 0.2,
+      t: rowOffset,
+      lane: -0.7 + (i % 2) * 0.05,
       speed: 0,
       baseSpeed: 0.024 + Math.random() * 0.005,
       stamina: 1,
+      hp: 1,
+      boostTimer: 0,
+      boostCooldown: 0,
+      whipPrev: false,
+      wrecked: false,
       isPlayer: team === "blue" && i === playerIdx,
       finished: false,
     });
@@ -96,11 +104,16 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
       id: id++,
       team: "green",
       name: GREEN_NAMES[i],
-      t: -0.004 * (i * 2 + 1),
-      lane: -0.5 + i * 0.2,
+      t: rowOffset - 0.004,
+      lane: 0.4 + (i % 2) * 0.05,
       speed: 0,
       baseSpeed: 0.024 + Math.random() * 0.005,
       stamina: 1,
+      hp: 1,
+      boostTimer: 0,
+      boostCooldown: 0,
+      whipPrev: false,
+      wrecked: false,
       isPlayer: team === "green" && i === playerIdx,
       finished: false,
     });
