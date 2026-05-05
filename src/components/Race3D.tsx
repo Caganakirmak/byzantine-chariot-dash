@@ -29,6 +29,8 @@ const TOTAL_LAPS = 12;
 const BOOST_DURATION = 1.6;
 const BOOST_COOLDOWN = 3.5;
 const BOOST_STAMINA_COST = 0.28;
+const CRITICAL_HP_FLOOR = 0.12;
+const SEVERE_WRECK_DAMAGE = 0.05;
 
 // Track geometry
 const STRAIGHT = 60;
@@ -119,6 +121,18 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
     });
   }
   return list;
+}
+
+function applyChariotDamage(c: Chariot, amount: number, canWreck: boolean) {
+  if (c.wrecked) return;
+  const nextHp = c.hp - amount;
+  if (canWreck && nextHp <= 0) {
+    c.hp = 0;
+    c.wrecked = true;
+    c.speed *= 0.2;
+    return;
+  }
+  c.hp = Math.max(CRITICAL_HP_FLOOR, nextHp);
 }
 
 // ---------- Visuals ----------
@@ -616,8 +630,8 @@ function Loop({
         continue;
       }
 
-      // HP-based speed cap (damage slows the chariot)
-      const hpPenalty = c.hp < 0.4 ? 0.55 + c.hp : 1; // <0.4 hp -> noticeable slowdown
+      // HP-based speed cap (damage slows the chariot before it actually DNFs)
+      const hpPenalty = c.hp < 0.18 ? 0.42 + c.hp * 1.8 : c.hp < 0.4 ? 0.62 + c.hp * 0.65 : 1;
       // Per-chariot variable speed factor (always changing, never constant)
       const variability = 1 + Math.sin(performance.now() / 800 + c.id * 1.7) * 0.07
         + Math.sin(performance.now() / 230 + c.id * 0.9) * 0.025;
@@ -698,10 +712,9 @@ function Loop({
 
       // Wall scrape damage on outer/inner edges
       if (c.lane <= -0.98 || c.lane >= 0.98) {
-        const wallDmg = c.speed * 0.35 * dt + 0.002;
-        c.hp = Math.max(0, c.hp - wallDmg);
+        const wallDmg = c.speed * 0.18 * dt + 0.00045;
+        applyChariotDamage(c, wallDmg, c.hp <= CRITICAL_HP_FLOOR && c.speed > 0.018);
         c.speed *= 0.985;
-        if (c.hp <= 0 && !c.wrecked) { c.wrecked = true; c.speed *= 0.2; }
       }
 
       if (Math.floor(c.t) > Math.floor(before) && Math.floor(c.t) >= TOTAL_LAPS) {
@@ -742,15 +755,14 @@ function Loop({
             b.lane = Math.min(1, b.lane + lanePush);
           }
 
-          // Damage proportional to relative speed; hitting a wrecked chariot is much worse
+          // Damage proportional to relative speed; repeated bumps cripple first, only heavy hits DNF
           const relSpeed = Math.abs(a.speed - b.speed) + 0.005;
-          const baseDmg = Math.min(0.08, relSpeed * 1.4) + 0.012;
-          const aDmg = baseDmg * (b.wrecked ? 2.4 : 1);
-          const bDmg = baseDmg * (a.wrecked ? 2.4 : 1);
-          a.hp = Math.max(0, a.hp - aDmg);
-          b.hp = Math.max(0, b.hp - bDmg);
-          if (a.hp <= 0 && !a.wrecked) { a.wrecked = true; a.speed *= 0.2; }
-          if (b.hp <= 0 && !b.wrecked) { b.wrecked = true; b.speed *= 0.2; }
+          const impact = relSpeed + Math.max(a.speed, b.speed) * 0.28;
+          const baseDmg = Math.min(0.045, impact * 0.55) + 0.004;
+          const aDmg = baseDmg * (b.wrecked ? 1.55 : 1);
+          const bDmg = baseDmg * (a.wrecked ? 1.55 : 1);
+          applyChariotDamage(a, aDmg, a.hp <= CRITICAL_HP_FLOOR && (b.wrecked || aDmg >= SEVERE_WRECK_DAMAGE));
+          applyChariotDamage(b, bDmg, b.hp <= CRITICAL_HP_FLOOR && (a.wrecked || bDmg >= SEVERE_WRECK_DAMAGE));
 
           if (dt2 >= 0) {
             b.t = a.t - T_THRESH;
