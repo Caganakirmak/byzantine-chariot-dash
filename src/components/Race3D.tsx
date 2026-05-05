@@ -604,19 +604,23 @@ function Loop({
       if (c.boostTimer > 0) c.boostTimer = Math.max(0, c.boostTimer - dt);
       if (c.boostCooldown > 0) c.boostCooldown = Math.max(0, c.boostCooldown - dt);
 
-      // Wrecked: massive slowdown, recover slowly
+      // Wrecked: chariot is destroyed, comes to a stop and DNFs
       if (c.wrecked) {
-        c.speed = Math.max(0, c.speed - 0.06 * dt);
-        // hp slowly self-repairs back from 0 enough to limp
-        c.hp = Math.min(0.25, c.hp + 0.02 * dt);
-        if (c.hp >= 0.2) c.wrecked = false;
-        c.t += c.speed * dt;
+        c.speed = Math.max(0, c.speed - 0.12 * dt);
+        // No movement, no recovery — they're out of the race
+        if (c.speed > 0) c.t += c.speed * dt;
+        if (!c.finished && c.speed <= 0.001) {
+          c.finished = true;
+          c.finishOrder = 999 + c.id; // DNF: sorted to the back
+        }
         continue;
       }
 
       // HP-based speed cap (damage slows the chariot)
       const hpPenalty = c.hp < 0.4 ? 0.55 + c.hp : 1; // <0.4 hp -> noticeable slowdown
-      const boosting = c.boostTimer > 0;
+      // Per-chariot variable speed factor (always changing, never constant)
+      const variability = 1 + Math.sin(performance.now() / 800 + c.id * 1.7) * 0.07
+        + Math.sin(performance.now() / 230 + c.id * 0.9) * 0.025;
 
       if (c.isPlayer) {
         const k = keysRef.current;
@@ -646,7 +650,7 @@ function Loop({
         const cruise = exhausted ? c.baseSpeed * 0.45 : c.baseSpeed * 0.88;
         let target = whipHeld ? c.baseSpeed * 1.22 * staminaPenalty : brake ? c.baseSpeed * 0.4 : cruise;
         if (c.boostTimer > 0) target = c.baseSpeed * 1.55;
-        target *= hpPenalty;
+        target *= hpPenalty * variability;
         const accel = c.boostTimer > 0 ? 0.06 : whipHeld ? 0.035 : 0.02;
         if (c.speed < target) c.speed = Math.min(target, c.speed + accel * dt);
         else c.speed = Math.max(target, c.speed - accel * 0.6 * dt);
@@ -681,7 +685,7 @@ function Loop({
         const staminaPenalty = Math.max(0.7, c.stamina);
         let target = c.baseSpeed * (1.0 + Math.sin(performance.now() / 700 + c.id) * 0.06) * staminaPenalty * rubber;
         if (c.boostTimer > 0) target = c.baseSpeed * 1.5;
-        target *= hpPenalty;
+        target *= hpPenalty * variability;
         if (c.speed < target) c.speed = Math.min(target, c.speed + (c.boostTimer > 0 ? 0.06 : 0.035) * dt);
         else c.speed = Math.max(target, c.speed - 0.02 * dt);
       }
@@ -689,6 +693,14 @@ function Loop({
       const laneMult = 1 - (c.lane + 1) * 0.04;
       const before = c.t;
       c.t += c.speed * laneMult * dt;
+
+      // Wall scrape damage on outer/inner edges
+      if (c.lane <= -0.98 || c.lane >= 0.98) {
+        const wallDmg = c.speed * 0.35 * dt + 0.002;
+        c.hp = Math.max(0, c.hp - wallDmg);
+        c.speed *= 0.985;
+        if (c.hp <= 0 && !c.wrecked) { c.wrecked = true; c.speed *= 0.2; }
+      }
 
       if (Math.floor(c.t) > Math.floor(before) && Math.floor(c.t) >= TOTAL_LAPS) {
         c.finished = true;
@@ -723,11 +735,13 @@ function Loop({
             b.lane = Math.min(1, b.lane + lanePush);
           }
 
-          // Damage proportional to relative speed
+          // Damage proportional to relative speed; hitting a wrecked chariot is much worse
           const relSpeed = Math.abs(a.speed - b.speed) + 0.005;
-          const dmg = Math.min(0.05, relSpeed * 0.9) + 0.004;
-          a.hp = Math.max(0, a.hp - dmg);
-          b.hp = Math.max(0, b.hp - dmg);
+          const baseDmg = Math.min(0.08, relSpeed * 1.4) + 0.012;
+          const aDmg = baseDmg * (b.wrecked ? 2.4 : 1);
+          const bDmg = baseDmg * (a.wrecked ? 2.4 : 1);
+          a.hp = Math.max(0, a.hp - aDmg);
+          b.hp = Math.max(0, b.hp - bDmg);
           if (a.hp <= 0 && !a.wrecked) { a.wrecked = true; a.speed *= 0.2; }
           if (b.hp <= 0 && !b.wrecked) { b.wrecked = true; b.speed *= 0.2; }
 
@@ -815,7 +829,11 @@ export const Race3D = ({ team, onExit }: Props) => {
 
   const chariots = chariotsRef.current;
   const player = chariots.find((c) => c.isPlayer)!;
-  const standings = [...chariots].sort((a, b) => b.t - a.t);
+  const standings = [...chariots].sort((a, b) => {
+    if (a.wrecked && !b.wrecked) return 1;
+    if (!a.wrecked && b.wrecked) return -1;
+    return b.t - a.t;
+  });
   const playerPos = standings.findIndex((c) => c.isPlayer) + 1;
   const playerLap = Math.min(TOTAL_LAPS, Math.max(1, Math.floor(player.t) + 1));
 
@@ -965,8 +983,8 @@ export const Race3D = ({ team, onExit }: Props) => {
                 <span className={`flex-1 truncate ${c.isPlayer ? "font-bold text-marble" : "text-foreground/80"}`}>
                   {c.name}{c.isPlayer ? " ★" : ""}
                 </span>
-                <span className="text-foreground/60">
-                  L{Math.min(TOTAL_LAPS, Math.max(1, Math.floor(c.t) + 1))}
+                <span className={`text-foreground/60 ${c.wrecked ? "font-bold text-red-400" : ""}`}>
+                  {c.wrecked ? "DNF" : `L${Math.min(TOTAL_LAPS, Math.max(1, Math.floor(c.t) + 1))}`}
                 </span>
               </li>
             ))}
