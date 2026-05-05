@@ -685,7 +685,7 @@ function Loop({
         const staminaPenalty = Math.max(0.7, c.stamina);
         let target = c.baseSpeed * (1.0 + Math.sin(performance.now() / 700 + c.id) * 0.06) * staminaPenalty * rubber;
         if (c.boostTimer > 0) target = c.baseSpeed * 1.5;
-        target *= hpPenalty;
+        target *= hpPenalty * variability;
         if (c.speed < target) c.speed = Math.min(target, c.speed + (c.boostTimer > 0 ? 0.06 : 0.035) * dt);
         else c.speed = Math.max(target, c.speed - 0.02 * dt);
       }
