@@ -715,7 +715,8 @@ function Loop({
       for (let j = i + 1; j < chariots.length; j++) {
         const a = chariots[i];
         const b = chariots[j];
-        if (a.finished || b.finished) continue;
+        // Skip only if BOTH have cleanly finished (not wrecked) — wrecked stopped chariots remain as obstacles
+        if ((a.finished && !a.wrecked) || (b.finished && !b.wrecked)) continue;
 
         let dt2 = a.t - b.t;
         if (Math.abs(dt2) > 0.5) continue;
