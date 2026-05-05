@@ -604,19 +604,23 @@ function Loop({
       if (c.boostTimer > 0) c.boostTimer = Math.max(0, c.boostTimer - dt);
       if (c.boostCooldown > 0) c.boostCooldown = Math.max(0, c.boostCooldown - dt);
 
-      // Wrecked: massive slowdown, recover slowly
+      // Wrecked: chariot is destroyed, comes to a stop and DNFs
       if (c.wrecked) {
-        c.speed = Math.max(0, c.speed - 0.06 * dt);
-        // hp slowly self-repairs back from 0 enough to limp
-        c.hp = Math.min(0.25, c.hp + 0.02 * dt);
-        if (c.hp >= 0.2) c.wrecked = false;
-        c.t += c.speed * dt;
+        c.speed = Math.max(0, c.speed - 0.12 * dt);
+        // No movement, no recovery — they're out of the race
+        if (c.speed > 0) c.t += c.speed * dt;
+        if (!c.finished && c.speed <= 0.001) {
+          c.finished = true;
+          c.finishOrder = 999 + c.id; // DNF: sorted to the back
+        }
         continue;
       }
 
       // HP-based speed cap (damage slows the chariot)
       const hpPenalty = c.hp < 0.4 ? 0.55 + c.hp : 1; // <0.4 hp -> noticeable slowdown
-      const boosting = c.boostTimer > 0;
+      // Per-chariot variable speed factor (always changing, never constant)
+      const variability = 1 + Math.sin(performance.now() / 800 + c.id * 1.7) * 0.07
+        + Math.sin(performance.now() / 230 + c.id * 0.9) * 0.025;
 
       if (c.isPlayer) {
         const k = keysRef.current;
