@@ -727,11 +727,13 @@ function Loop({
             b.lane = Math.min(1, b.lane + lanePush);
           }
 
-          // Damage proportional to relative speed
+          // Damage proportional to relative speed; hitting a wrecked chariot is much worse
           const relSpeed = Math.abs(a.speed - b.speed) + 0.005;
-          const dmg = Math.min(0.05, relSpeed * 0.9) + 0.004;
-          a.hp = Math.max(0, a.hp - dmg);
-          b.hp = Math.max(0, b.hp - dmg);
+          const baseDmg = Math.min(0.08, relSpeed * 1.4) + 0.012;
+          const aDmg = baseDmg * (b.wrecked ? 2.4 : 1);
+          const bDmg = baseDmg * (a.wrecked ? 2.4 : 1);
+          a.hp = Math.max(0, a.hp - aDmg);
+          b.hp = Math.max(0, b.hp - bDmg);
           if (a.hp <= 0 && !a.wrecked) { a.wrecked = true; a.speed *= 0.2; }
           if (b.hp <= 0 && !b.wrecked) { b.wrecked = true; b.speed *= 0.2; }
 
