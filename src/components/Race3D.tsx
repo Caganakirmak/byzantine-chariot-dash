@@ -694,6 +694,14 @@ function Loop({
       const before = c.t;
       c.t += c.speed * laneMult * dt;
 
+      // Wall scrape damage on outer/inner edges
+      if (c.lane <= -0.98 || c.lane >= 0.98) {
+        const wallDmg = c.speed * 0.35 * dt + 0.002;
+        c.hp = Math.max(0, c.hp - wallDmg);
+        c.speed *= 0.985;
+        if (c.hp <= 0 && !c.wrecked) { c.wrecked = true; c.speed *= 0.2; }
+      }
+
       if (Math.floor(c.t) > Math.floor(before) && Math.floor(c.t) >= TOTAL_LAPS) {
         c.finished = true;
         finishCounter.current += 1;
