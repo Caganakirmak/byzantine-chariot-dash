@@ -755,15 +755,14 @@ function Loop({
             b.lane = Math.min(1, b.lane + lanePush);
           }
 
-          // Damage proportional to relative speed; hitting a wrecked chariot is much worse
+          // Damage proportional to relative speed; repeated bumps cripple first, only heavy hits DNF
           const relSpeed = Math.abs(a.speed - b.speed) + 0.005;
-          const baseDmg = Math.min(0.08, relSpeed * 1.4) + 0.012;
-          const aDmg = baseDmg * (b.wrecked ? 2.4 : 1);
-          const bDmg = baseDmg * (a.wrecked ? 2.4 : 1);
-          a.hp = Math.max(0, a.hp - aDmg);
-          b.hp = Math.max(0, b.hp - bDmg);
-          if (a.hp <= 0 && !a.wrecked) { a.wrecked = true; a.speed *= 0.2; }
-          if (b.hp <= 0 && !b.wrecked) { b.wrecked = true; b.speed *= 0.2; }
+          const impact = relSpeed + Math.max(a.speed, b.speed) * 0.28;
+          const baseDmg = Math.min(0.045, impact * 0.55) + 0.004;
+          const aDmg = baseDmg * (b.wrecked ? 1.55 : 1);
+          const bDmg = baseDmg * (a.wrecked ? 1.55 : 1);
+          applyChariotDamage(a, aDmg, a.hp <= CRITICAL_HP_FLOOR && (b.wrecked || aDmg >= SEVERE_WRECK_DAMAGE));
+          applyChariotDamage(b, bDmg, b.hp <= CRITICAL_HP_FLOOR && (a.wrecked || bDmg >= SEVERE_WRECK_DAMAGE));
 
           if (dt2 >= 0) {
             b.t = a.t - T_THRESH;
