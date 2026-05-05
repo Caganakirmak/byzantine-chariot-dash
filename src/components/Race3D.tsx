@@ -829,7 +829,11 @@ export const Race3D = ({ team, onExit }: Props) => {
 
   const chariots = chariotsRef.current;
   const player = chariots.find((c) => c.isPlayer)!;
-  const standings = [...chariots].sort((a, b) => b.t - a.t);
+  const standings = [...chariots].sort((a, b) => {
+    if (a.wrecked && !b.wrecked) return 1;
+    if (!a.wrecked && b.wrecked) return -1;
+    return b.t - a.t;
+  });
   const playerPos = standings.findIndex((c) => c.isPlayer) + 1;
   const playerLap = Math.min(TOTAL_LAPS, Math.max(1, Math.floor(player.t) + 1));
 
