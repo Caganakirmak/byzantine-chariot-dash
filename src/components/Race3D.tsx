@@ -641,14 +641,15 @@ function Loop({
 
         // Held whip drains stamina gradually
         if (whipHeld) {
-          c.stamina = Math.max(0, c.stamina - 0.13 * dt);
+          c.stamina = Math.max(0, c.stamina - 0.10 * dt);
         } else {
           c.stamina = Math.min(1, c.stamina + 0.05 * dt);
         }
-        const exhausted = c.stamina < 0.05;
-        const staminaPenalty = Math.max(0.55, c.stamina);
-        const cruise = exhausted ? c.baseSpeed * 0.45 : c.baseSpeed * 0.88;
-        let target = whipHeld ? c.baseSpeed * 1.22 * staminaPenalty : brake ? c.baseSpeed * 0.4 : cruise;
+        // Stamina penalty: only kicks in when stamina is RED (<0.2). Yellow/green = no slowdown.
+        const staminaPenalty = c.stamina < 0.2 ? 0.4 + c.stamina * 2 : 1; // 0.4..0.8 in red, else 1
+        const cruise = c.baseSpeed * 0.92;
+        let target = whipHeld ? c.baseSpeed * 1.18 : brake ? c.baseSpeed * 0.4 : cruise;
+        target *= staminaPenalty;
         if (c.boostTimer > 0) target = c.baseSpeed * 1.55;
         target *= hpPenalty * variability;
         const accel = c.boostTimer > 0 ? 0.06 : whipHeld ? 0.035 : 0.02;
@@ -661,7 +662,8 @@ function Loop({
         const player = chariots.find((pl) => pl.isPlayer);
         const playerT = player ? player.t : c.t;
         const gap = c.t - playerT;
-        const rubber = gap < 0 ? 1 + Math.min(0.18, -gap * 1.4) : 1 - Math.min(0.08, gap * 1.0);
+        // Stronger rubber-band: catch up harder when behind, only mildly hold back when ahead
+        const rubber = gap < 0 ? 1 + Math.min(0.28, -gap * 2.0) : 1 - Math.min(0.05, gap * 0.6);
 
         const targetLane = -0.5 + Math.sin(c.t * 4 + c.id) * 0.4;
         const diff = targetLane - c.lane;
@@ -669,24 +671,24 @@ function Loop({
 
         // AI stamina dynamics
         const staminaDrain = c.boostTimer > 0 ? 0.18 : 0.04;
-        const staminaRegen = 0.06;
+        const staminaRegen = 0.07;
         c.stamina = Math.max(0, Math.min(1, c.stamina + (c.boostTimer > 0 ? -staminaDrain : staminaRegen) * dt));
 
-        // AI decides to boost: if behind player or randomly, with cooldown & stamina
-        if (c.boostCooldown <= 0 && c.stamina > BOOST_STAMINA_COST + 0.1) {
-          const wantBoost = (gap < -0.02 && Math.random() < 0.012) || Math.random() < 0.003;
+        // AI decides to boost more aggressively when behind
+        if (c.boostCooldown <= 0 && c.stamina > BOOST_STAMINA_COST + 0.05) {
+          const wantBoost = (gap < -0.005 && Math.random() < 0.035) || Math.random() < 0.005;
           if (wantBoost) {
             c.boostTimer = BOOST_DURATION;
-            c.boostCooldown = BOOST_COOLDOWN + Math.random() * 1.5;
+            c.boostCooldown = BOOST_COOLDOWN + Math.random() * 1.0;
             c.stamina = Math.max(0, c.stamina - BOOST_STAMINA_COST);
           }
         }
 
-        const staminaPenalty = Math.max(0.7, c.stamina);
-        let target = c.baseSpeed * (1.0 + Math.sin(performance.now() / 700 + c.id) * 0.06) * staminaPenalty * rubber;
-        if (c.boostTimer > 0) target = c.baseSpeed * 1.5;
+        const staminaPenalty = c.stamina < 0.2 ? 0.55 + c.stamina * 2 : 1;
+        let target = c.baseSpeed * (1.06 + Math.sin(performance.now() / 700 + c.id) * 0.06) * staminaPenalty * rubber;
+        if (c.boostTimer > 0) target = c.baseSpeed * 1.55;
         target *= hpPenalty * variability;
-        if (c.speed < target) c.speed = Math.min(target, c.speed + (c.boostTimer > 0 ? 0.06 : 0.035) * dt);
+        if (c.speed < target) c.speed = Math.min(target, c.speed + (c.boostTimer > 0 ? 0.06 : 0.04) * dt);
         else c.speed = Math.max(target, c.speed - 0.02 * dt);
       }
 
@@ -714,7 +716,8 @@ function Loop({
       for (let j = i + 1; j < chariots.length; j++) {
         const a = chariots[i];
         const b = chariots[j];
-        if (a.finished || b.finished) continue;
+        // Skip only if BOTH have cleanly finished (not wrecked) — wrecked stopped chariots remain as obstacles
+        if ((a.finished && !a.wrecked) || (b.finished && !b.wrecked)) continue;
 
         let dt2 = a.t - b.t;
         if (Math.abs(dt2) > 0.5) continue;
