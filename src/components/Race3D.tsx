@@ -719,8 +719,12 @@ function Loop({
         // Skip only if BOTH have cleanly finished (not wrecked) — wrecked stopped chariots remain as obstacles
         if ((a.finished && !a.wrecked) || (b.finished && !b.wrecked)) continue;
 
+        // Compare positions on the track modulo a full lap so that wrecked
+        // chariots remain solid obstacles even when the player laps them.
         let dt2 = a.t - b.t;
-        if (Math.abs(dt2) > 0.5) continue;
+        let dt2Mod = dt2 - Math.round(dt2); // wrap into [-0.5, 0.5]
+        if (Math.abs(dt2Mod) > 0.05) continue;
+        dt2 = dt2Mod;
         const laneDiff = a.lane - b.lane;
         const absLane = Math.abs(laneDiff);
         const absT = Math.abs(dt2);
