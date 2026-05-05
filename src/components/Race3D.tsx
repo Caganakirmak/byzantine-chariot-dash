@@ -983,8 +983,8 @@ export const Race3D = ({ team, onExit }: Props) => {
                 <span className={`flex-1 truncate ${c.isPlayer ? "font-bold text-marble" : "text-foreground/80"}`}>
                   {c.name}{c.isPlayer ? " ★" : ""}
                 </span>
-                <span className="text-foreground/60">
-                  L{Math.min(TOTAL_LAPS, Math.max(1, Math.floor(c.t) + 1))}
+                <span className={`text-foreground/60 ${c.wrecked ? "font-bold text-red-400" : ""}`}>
+                  {c.wrecked ? "DNF" : `L${Math.min(TOTAL_LAPS, Math.max(1, Math.floor(c.t) + 1))}`}
                 </span>
               </li>
             ))}
