@@ -650,7 +650,7 @@ function Loop({
         const cruise = exhausted ? c.baseSpeed * 0.45 : c.baseSpeed * 0.88;
         let target = whipHeld ? c.baseSpeed * 1.22 * staminaPenalty : brake ? c.baseSpeed * 0.4 : cruise;
         if (c.boostTimer > 0) target = c.baseSpeed * 1.55;
-        target *= hpPenalty;
+        target *= hpPenalty * variability;
         const accel = c.boostTimer > 0 ? 0.06 : whipHeld ? 0.035 : 0.02;
         if (c.speed < target) c.speed = Math.min(target, c.speed + accel * dt);
         else c.speed = Math.max(target, c.speed - accel * 0.6 * dt);
