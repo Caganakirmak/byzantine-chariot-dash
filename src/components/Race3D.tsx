@@ -29,6 +29,8 @@ const TOTAL_LAPS = 12;
 const BOOST_DURATION = 1.6;
 const BOOST_COOLDOWN = 3.5;
 const BOOST_STAMINA_COST = 0.28;
+const CRITICAL_HP_FLOOR = 0.12;
+const SEVERE_WRECK_DAMAGE = 0.05;
 
 // Track geometry
 const STRAIGHT = 60;
@@ -119,6 +121,18 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
     });
   }
   return list;
+}
+
+function applyChariotDamage(c: Chariot, amount: number, canWreck: boolean) {
+  if (c.wrecked) return;
+  const nextHp = c.hp - amount;
+  if (canWreck && nextHp <= 0) {
+    c.hp = 0;
+    c.wrecked = true;
+    c.speed *= 0.2;
+    return;
+  }
+  c.hp = Math.max(CRITICAL_HP_FLOOR, nextHp);
 }
 
 // ---------- Visuals ----------
