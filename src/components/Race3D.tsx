@@ -630,8 +630,8 @@ function Loop({
         continue;
       }
 
-      // HP-based speed cap (damage slows the chariot)
-      const hpPenalty = c.hp < 0.4 ? 0.55 + c.hp : 1; // <0.4 hp -> noticeable slowdown
+      // HP-based speed cap (damage slows the chariot before it actually DNFs)
+      const hpPenalty = c.hp < 0.18 ? 0.42 + c.hp * 1.8 : c.hp < 0.4 ? 0.62 + c.hp * 0.65 : 1;
       // Per-chariot variable speed factor (always changing, never constant)
       const variability = 1 + Math.sin(performance.now() / 800 + c.id * 1.7) * 0.07
         + Math.sin(performance.now() / 230 + c.id * 0.9) * 0.025;
@@ -712,10 +712,9 @@ function Loop({
 
       // Wall scrape damage on outer/inner edges
       if (c.lane <= -0.98 || c.lane >= 0.98) {
-        const wallDmg = c.speed * 0.35 * dt + 0.002;
-        c.hp = Math.max(0, c.hp - wallDmg);
+        const wallDmg = c.speed * 0.18 * dt + 0.00045;
+        applyChariotDamage(c, wallDmg, c.hp <= CRITICAL_HP_FLOOR && c.speed > 0.018);
         c.speed *= 0.985;
-        if (c.hp <= 0 && !c.wrecked) { c.wrecked = true; c.speed *= 0.2; }
       }
 
       if (Math.floor(c.t) > Math.floor(before) && Math.floor(c.t) >= TOTAL_LAPS) {
