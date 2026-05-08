@@ -622,6 +622,7 @@ function Loop({
       // Tick boost timers
       if (c.boostTimer > 0) c.boostTimer = Math.max(0, c.boostTimer - dt);
       if (c.boostCooldown > 0) c.boostCooldown = Math.max(0, c.boostCooldown - dt);
+      if (c.damageCooldown > 0) c.damageCooldown = Math.max(0, c.damageCooldown - dt);
 
       // Wrecked: chariot is destroyed, comes to a stop and DNFs
       if (c.wrecked) {
@@ -717,9 +718,9 @@ function Loop({
 
       // Wall scrape damage on outer/inner edges
       if (c.lane <= -0.98 || c.lane >= 0.98) {
-        const wallDmg = c.speed * 0.18 * dt + 0.00045;
-        applyChariotDamage(c, wallDmg, c.hp <= CRITICAL_HP_FLOOR && c.speed > 0.018);
-        c.speed *= 0.985;
+        const wallDmg = c.speed * 0.12 * dt + 0.00025;
+        applyChariotDamage(c, wallDmg, c.hp <= CRITICAL_HP_FLOOR && c.speed > 0.024 && wallDmg >= SEVERE_WRECK_DAMAGE);
+        c.speed *= 0.988;
       }
 
       if (Math.floor(c.t) > Math.floor(before) && Math.floor(c.t) >= TOTAL_LAPS) {
@@ -747,11 +748,11 @@ function Loop({
         const absLane = Math.abs(laneDiff);
         const absT = Math.abs(dt2);
 
-        const T_THRESH = 0.012;
-        const LANE_THRESH = 0.32;
+        const T_THRESH = 0.011;
+        const LANE_THRESH = 0.3;
 
         if (absT < T_THRESH && absLane < LANE_THRESH) {
-          const lanePush = (LANE_THRESH - absLane) * 0.5;
+          const lanePush = (LANE_THRESH - absLane) * 0.6;
           if (laneDiff >= 0) {
             a.lane = Math.min(1, a.lane + lanePush);
             b.lane = Math.max(-1, b.lane - lanePush);
@@ -761,13 +762,21 @@ function Loop({
           }
 
           // Damage proportional to relative speed; repeated bumps cripple first, only heavy hits DNF
-          const relSpeed = Math.abs(a.speed - b.speed) + 0.005;
-          const impact = relSpeed + Math.max(a.speed, b.speed) * 0.28;
-          const baseDmg = Math.min(0.045, impact * 0.55) + 0.004;
-          const aDmg = baseDmg * (b.wrecked ? 1.55 : 1);
-          const bDmg = baseDmg * (a.wrecked ? 1.55 : 1);
-          applyChariotDamage(a, aDmg, a.hp <= CRITICAL_HP_FLOOR && (b.wrecked || aDmg >= SEVERE_WRECK_DAMAGE));
-          applyChariotDamage(b, bDmg, b.hp <= CRITICAL_HP_FLOOR && (a.wrecked || bDmg >= SEVERE_WRECK_DAMAGE));
+          const relSpeed = Math.abs(a.speed - b.speed) + 0.003;
+          const impact = relSpeed + Math.max(a.speed, b.speed) * 0.2;
+          const baseDmg = Math.min(0.034, impact * 0.42) + 0.0025;
+          const aDmg = baseDmg * (b.wrecked ? 1.35 : 1);
+          const bDmg = baseDmg * (a.wrecked ? 1.35 : 1);
+          const heavyA = b.wrecked || relSpeed > 0.016 || a.speed > 0.028;
+          const heavyB = a.wrecked || relSpeed > 0.016 || b.speed > 0.028;
+          if (a.damageCooldown <= 0) {
+            applyChariotDamage(a, aDmg, heavyA);
+            a.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
+          }
+          if (b.damageCooldown <= 0) {
+            applyChariotDamage(b, bDmg, heavyB);
+            b.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
+          }
 
           if (dt2 >= 0) {
             b.t = a.t - T_THRESH;
