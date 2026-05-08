@@ -19,6 +19,7 @@ type Chariot = {
   boostTimer: number; // seconds remaining of boost
   boostCooldown: number; // seconds until next boost allowed
   whipPrev: boolean; // for AI/player edge detection
+  damageCooldown: number; // prevents one crash from draining HP every frame
   wrecked: boolean;
   isPlayer: boolean;
   finished: boolean;
@@ -29,8 +30,9 @@ const TOTAL_LAPS = 12;
 const BOOST_DURATION = 1.6;
 const BOOST_COOLDOWN = 3.5;
 const BOOST_STAMINA_COST = 0.28;
-const CRITICAL_HP_FLOOR = 0.12;
-const SEVERE_WRECK_DAMAGE = 0.05;
+const CRITICAL_HP_FLOOR = 0.1;
+const SEVERE_WRECK_DAMAGE = 0.052;
+const COLLISION_DAMAGE_COOLDOWN = 0.5;
 
 // Track geometry
 const STRAIGHT = 60;
@@ -98,6 +100,7 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
       boostTimer: 0,
       boostCooldown: 0,
       whipPrev: false,
+      damageCooldown: 0,
       wrecked: false,
       isPlayer: team === "blue" && i === playerIdx,
       finished: false,
@@ -115,6 +118,7 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
       boostTimer: 0,
       boostCooldown: 0,
       whipPrev: false,
+      damageCooldown: 0,
       wrecked: false,
       isPlayer: team === "green" && i === playerIdx,
       finished: false,
@@ -126,7 +130,8 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
 function applyChariotDamage(c: Chariot, amount: number, canWreck: boolean) {
   if (c.wrecked) return;
   const nextHp = c.hp - amount;
-  if (canWreck && nextHp <= 0) {
+  const terminalImpact = canWreck && c.hp <= CRITICAL_HP_FLOOR && amount >= SEVERE_WRECK_DAMAGE;
+  if (terminalImpact || (canWreck && nextHp <= 0)) {
     c.hp = 0;
     c.wrecked = true;
     c.speed *= 0.2;
