@@ -591,7 +591,7 @@ function CameraFPS({ chariotsRef }: { chariotsRef: React.MutableRefObject<Chario
       const rect = el.getBoundingClientRect();
       const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;  // -1..1
       const ny = ((e.clientY - rect.top) / rect.height) * 2 - 1;  // -1..1
-      targetYaw.current = -nx * MAX_YAW;
+      targetYaw.current = nx * MAX_YAW;
       targetPitch.current = -ny * MAX_PITCH;
     };
     const onLeave = () => {
