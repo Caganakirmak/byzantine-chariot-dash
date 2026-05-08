@@ -30,9 +30,9 @@ const TOTAL_LAPS = 12;
 const BOOST_DURATION = 1.6;
 const BOOST_COOLDOWN = 3.5;
 const BOOST_STAMINA_COST = 0.28;
-const CRITICAL_HP_FLOOR = 0.1;
-const SEVERE_WRECK_DAMAGE = 0.052;
-const COLLISION_DAMAGE_COOLDOWN = 0.5;
+const CRITICAL_HP_FLOOR = 0.08;
+const SEVERE_WRECK_DAMAGE = 0.045;
+const COLLISION_DAMAGE_COOLDOWN = 0.7;
 
 // Track geometry
 const STRAIGHT = 60;
@@ -130,14 +130,14 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
 function applyChariotDamage(c: Chariot, amount: number, canWreck: boolean) {
   if (c.wrecked) return;
   const nextHp = c.hp - amount;
-  const terminalImpact = canWreck && c.hp <= CRITICAL_HP_FLOOR && amount >= SEVERE_WRECK_DAMAGE;
+  const terminalImpact = canWreck && nextHp <= CRITICAL_HP_FLOOR;
   if (terminalImpact || (canWreck && nextHp <= 0)) {
     c.hp = 0;
     c.wrecked = true;
     c.speed *= 0.2;
     return;
   }
-  c.hp = Math.max(CRITICAL_HP_FLOOR, nextHp);
+  c.hp = Math.max(canWreck ? 0 : CRITICAL_HP_FLOOR, nextHp);
 }
 
 // ---------- Visuals ----------
