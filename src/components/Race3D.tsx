@@ -718,8 +718,9 @@ function Loop({
 
       // Wall scrape damage on outer/inner edges
       if (c.lane <= -0.98 || c.lane >= 0.98) {
-        const wallDmg = c.speed * 0.12 * dt + 0.00025;
-        applyChariotDamage(c, wallDmg, c.hp <= CRITICAL_HP_FLOOR && c.speed > 0.024 && wallDmg >= SEVERE_WRECK_DAMAGE);
+        const wallDmg = c.speed * 0.1 * dt + 0.00018;
+        const canWallWreck = c.hp <= CRITICAL_HP_FLOOR && c.speed > 0.026;
+        applyChariotDamage(c, wallDmg, canWallWreck);
         c.speed *= 0.988;
       }
 
@@ -761,14 +762,14 @@ function Loop({
             b.lane = Math.min(1, b.lane + lanePush);
           }
 
-          // Damage proportional to relative speed; repeated bumps cripple first, only heavy hits DNF
+          // Every contact deals some damage, but cooldown prevents one impact from draining HP every frame.
           const relSpeed = Math.abs(a.speed - b.speed) + 0.003;
           const impact = relSpeed + Math.max(a.speed, b.speed) * 0.2;
-          const baseDmg = Math.min(0.034, impact * 0.42) + 0.0025;
-          const aDmg = baseDmg * (b.wrecked ? 1.35 : 1);
-          const bDmg = baseDmg * (a.wrecked ? 1.35 : 1);
-          const heavyA = b.wrecked || relSpeed > 0.016 || a.speed > 0.028;
-          const heavyB = a.wrecked || relSpeed > 0.016 || b.speed > 0.028;
+          const baseDmg = Math.min(0.038, impact * 0.46) + 0.0035;
+          const aDmg = baseDmg * (b.wrecked ? 1.45 : 1);
+          const bDmg = baseDmg * (a.wrecked ? 1.45 : 1);
+          const heavyA = b.wrecked || relSpeed > 0.014 || a.speed > 0.026 || a.hp <= CRITICAL_HP_FLOOR;
+          const heavyB = a.wrecked || relSpeed > 0.014 || b.speed > 0.026 || b.hp <= CRITICAL_HP_FLOOR;
           if (a.damageCooldown <= 0) {
             applyChariotDamage(a, aDmg, heavyA);
             a.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
