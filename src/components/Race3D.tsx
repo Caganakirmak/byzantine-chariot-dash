@@ -571,23 +571,66 @@ function StartFinishLine() {
   );
 }
 
-// First-person camera locked to the player's chariot (driver view)
+// First-person camera locked to the player's chariot (driver view) with mouse look
 function CameraFPS({ chariotsRef }: { chariotsRef: React.MutableRefObject<Chariot[]> }) {
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
   const camPos = useRef(new THREE.Vector3());
   const lookAt = useRef(new THREE.Vector3());
+  // Mouse-look offsets in radians
+  const yawOffset = useRef(0);
+  const pitchOffset = useRef(0);
+  const targetYaw = useRef(0);
+  const targetPitch = useRef(0);
 
-  useFrame(() => {
+  useEffect(() => {
+    const el = gl.domElement;
+    const MAX_YAW = Math.PI * 0.6;   // ~108° each side -> can look behind a bit
+    const MAX_PITCH = Math.PI * 0.35; // ~63° up/down
+
+    const onMove = (e: MouseEvent) => {
+      const rect = el.getBoundingClientRect();
+      const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;  // -1..1
+      const ny = ((e.clientY - rect.top) / rect.height) * 2 - 1;  // -1..1
+      targetYaw.current = -nx * MAX_YAW;
+      targetPitch.current = -ny * MAX_PITCH;
+    };
+    const onLeave = () => {
+      targetYaw.current = 0;
+      targetPitch.current = 0;
+    };
+    el.addEventListener("mousemove", onMove);
+    el.addEventListener("mouseleave", onLeave);
+    return () => {
+      el.removeEventListener("mousemove", onMove);
+      el.removeEventListener("mouseleave", onLeave);
+    };
+  }, [gl]);
+
+  useFrame((_, dt) => {
     const player = chariotsRef.current.find((c) => c.isPlayer);
     if (!player) return;
     const p = trackPosClean(player.t, player.lane);
-    // Driver head position: slightly behind front of chariot, forward = (cos a, -sin a)
     const fx = Math.cos(p.angle), fz = -Math.sin(p.angle);
     const headX = p.x + fx * -0.2;
     const headZ = p.z + fz * -0.2;
     camPos.current.set(headX, 2.2, headZ);
     camera.position.copy(camPos.current);
-    lookAt.current.set(headX + fx * 20, 1.6, headZ + fz * 20);
+
+    // Smoothly interpolate offsets toward target
+    const k = Math.min(1, dt * 10);
+    yawOffset.current += (targetYaw.current - yawOffset.current) * k;
+    pitchOffset.current += (targetPitch.current - pitchOffset.current) * k;
+
+    // Base heading angle (atan2 over forward vec). Apply yaw + pitch offsets.
+    const baseYaw = Math.atan2(fz, fx);
+    const yaw = baseYaw + yawOffset.current;
+    const pitch = pitchOffset.current;
+    const dist = 20;
+    const cp = Math.cos(pitch);
+    const lx = headX + Math.cos(yaw) * dist * cp;
+    const lz = headZ + Math.sin(yaw) * dist * cp;
+    const ly = 1.6 + Math.sin(pitch) * dist;
+    lookAt.current.set(lx, ly, lz);
     camera.lookAt(lookAt.current);
   });
   return null;
