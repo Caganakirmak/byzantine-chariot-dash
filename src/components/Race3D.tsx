@@ -736,8 +736,13 @@ function Loop({
         if (c.speed < target) c.speed = Math.min(target, c.speed + accel * dt);
         else c.speed = Math.max(target, c.speed - accel * 0.6 * dt);
 
-        if (left) c.lane = Math.max(-1, c.lane - 0.9 * dt);
-        if (right) c.lane = Math.min(1, c.lane + 0.9 * dt);
+        // Smooth steering: ramp lateral velocity toward intent
+        const steerInput = (right ? 1 : 0) - (left ? 1 : 0);
+        const desiredLaneVel = steerInput * 0.85;
+        const steerK = Math.min(1, dt * 4.5);
+        c.laneVel += (desiredLaneVel - c.laneVel) * steerK;
+        if (steerInput === 0) c.laneVel *= Math.max(0, 1 - dt * 3.5);
+        c.lane = Math.max(-1, Math.min(1, c.lane + c.laneVel * dt));
       } else {
         const player = chariots.find((pl) => pl.isPlayer);
         const playerT = player ? player.t : c.t;
