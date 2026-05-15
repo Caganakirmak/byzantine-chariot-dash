@@ -1037,10 +1037,11 @@ export const Race3D = ({ team, onExit }: Props) => {
           </div>
         </div>
 
-        <div className="pointer-events-auto absolute right-4 top-4">
+        <div className="pointer-events-auto absolute right-4 top-4 flex flex-col items-end gap-3">
           <Button variant="outline" size="sm" onClick={onExit}>
             Arenadan Ayrıl
           </Button>
+          <Minimap chariotsRef={chariotsRef} />
         </div>
 
         <div className="pointer-events-auto absolute bottom-4 right-4 w-64 rounded-lg border border-gold/40 bg-background/80 p-3 backdrop-blur">
