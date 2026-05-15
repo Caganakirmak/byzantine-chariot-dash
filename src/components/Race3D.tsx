@@ -751,8 +751,10 @@ function Loop({
         const rubber = gap < 0 ? 1 + Math.min(0.28, -gap * 2.0) : 1 - Math.min(0.05, gap * 0.6);
 
         const targetLane = -0.5 + Math.sin(c.t * 4 + c.id) * 0.4;
-        const diff = targetLane - c.lane;
-        c.lane += Math.sign(diff) * Math.min(0.7 * dt, Math.abs(diff));
+        // Smooth AI steering using laneVel (proportional control + damping)
+        const desiredAIVel = Math.max(-0.7, Math.min(0.7, (targetLane - c.lane) * 1.6));
+        c.laneVel += (desiredAIVel - c.laneVel) * Math.min(1, dt * 3.5);
+        c.lane = Math.max(-1, Math.min(1, c.lane + c.laneVel * dt));
 
         // AI stamina dynamics
         const staminaDrain = c.boostTimer > 0 ? 0.18 : 0.04;
