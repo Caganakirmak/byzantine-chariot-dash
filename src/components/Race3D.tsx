@@ -12,6 +12,7 @@ type Chariot = {
   name: string;
   t: number;
   lane: number;
+  laneVel: number;
   speed: number;
   baseSpeed: number;
   stamina: number; // 0..1
