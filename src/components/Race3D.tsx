@@ -42,6 +42,20 @@ const OUTER_RY = 44;
 const LANE_SPAN = OUTER_RY - INNER_RY;
 
 // Forward vector convention: with rotation.y = θ, local +X maps to world (cosθ, 0, -sinθ)
+
+// Returns 1 when on a curve segment, 0 on the straights (uses mid-lane radius for stable bands)
+function curveAmount(t: number) {
+  const ry = INNER_RY + 0.5 * LANE_SPAN;
+  const straightLen = STRAIGHT * 2;
+  const turnLen = Math.PI * ry;
+  const total = 2 * straightLen + 2 * turnLen;
+  const d = (((t % 1) + 1) % 1) * total;
+  if (d < straightLen) return 0;
+  if (d < straightLen + turnLen) return 1;
+  if (d < 2 * straightLen + turnLen) return 0;
+  return 1;
+}
+
 function trackPosClean(t: number, lane: number) {
   const ry = INNER_RY + ((lane + 1) / 2) * LANE_SPAN;
   const straightLen = STRAIGHT * 2;
