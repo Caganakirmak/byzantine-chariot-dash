@@ -856,6 +856,86 @@ function Loop({
   return null;
 }
 
+// 2D minimap overlay rendering the oval track + every chariot's live position
+function Minimap({ chariotsRef }: { chariotsRef: React.MutableRefObject<Chariot[]> }) {
+  const [, force] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    let last = 0;
+    const tick = (ts: number) => {
+      if (ts - last > 80) {
+        last = ts;
+        force((n) => (n + 1) % 1000000);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  // World bounds of the track (with margin)
+  const halfW = STRAIGHT + OUTER_RY + 6;
+  const halfH = OUTER_RY + 6;
+  const W = 220;
+  const H = (W * halfH) / halfW;
+  const sx = (x: number) => ((x + halfW) / (2 * halfW)) * W;
+  const sz = (z: number) => ((z + halfH) / (2 * halfH)) * H;
+
+  // Build oval centerline path (outer + inner) using ellipse arcs
+  const midRy = (INNER_RY + OUTER_RY) / 2;
+  const ovalPath = (ry: number) => {
+    const x1 = sx(STRAIGHT), x2 = sx(-STRAIGHT);
+    const top = sz(-ry), bot = sz(ry);
+    const rxPx = ((ry / (2 * halfW)) * W) * (halfW / halfW);
+    const rxPxX = (ry / (2 * halfW)) * W * 2 * (halfW / (2 * halfW));
+    // simpler: compute rx/ry in pixels directly from world ry
+    const rxP = (ry / (2 * halfW)) * W;
+    const ryP = (ry / (2 * halfH)) * H;
+    return `M ${x1} ${bot} L ${x2} ${bot} A ${rxP} ${ryP} 0 0 1 ${x2} ${top} L ${x1} ${top} A ${rxP} ${ryP} 0 0 1 ${x1} ${bot} Z`;
+  };
+
+  const chariots = chariotsRef.current;
+
+  return (
+    <div className="rounded-lg border border-gold/40 bg-background/80 p-2 backdrop-blur">
+      <p className="mb-1 px-1 font-imperial text-[10px] uppercase tracking-[0.2em] text-gold">Pist Haritası</p>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="block">
+        {/* Track surface band (outer minus inner) */}
+        <path d={ovalPath(OUTER_RY)} fill="hsl(35 25% 18% / 0.85)" stroke="hsl(45 60% 55% / 0.5)" strokeWidth={1} />
+        <path d={ovalPath(INNER_RY)} fill="hsl(220 15% 8% / 0.9)" stroke="hsl(45 60% 55% / 0.4)" strokeWidth={1} />
+        {/* Start/finish line at bottom-right of straight (x near +STRAIGHT, z = +midRy) */}
+        <line
+          x1={sx(STRAIGHT - 2)} y1={sz(INNER_RY)}
+          x2={sx(STRAIGHT - 2)} y2={sz(OUTER_RY)}
+          stroke="hsl(45 90% 60%)" strokeWidth={1.5}
+        />
+        {/* Chariots */}
+        {chariots.map((c) => {
+          const p = trackPosClean(c.t, c.lane);
+          const cx = sx(p.x);
+          const cy = sz(p.z);
+          const color = c.team === "blue" ? "#5fb3ff" : "#6be07f";
+          if (c.wrecked) {
+            return (
+              <g key={c.id}>
+                <circle cx={cx} cy={cy} r={3} fill="#7a1d2a" stroke="#c63a3a" strokeWidth={1} />
+              </g>
+            );
+          }
+          return (
+            <g key={c.id}>
+              {c.isPlayer && (
+                <circle cx={cx} cy={cy} r={6} fill="none" stroke="#f1c14a" strokeWidth={1.5} opacity={0.9} />
+              )}
+              <circle cx={cx} cy={cy} r={c.isPlayer ? 3.5 : 2.8} fill={color} stroke="#0b0b0b" strokeWidth={0.8} />
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 type Props = {
   team: Team;
   onExit: () => void;
@@ -1037,10 +1117,11 @@ export const Race3D = ({ team, onExit }: Props) => {
           </div>
         </div>
 
-        <div className="pointer-events-auto absolute right-4 top-4">
+        <div className="pointer-events-auto absolute right-4 top-4 flex flex-col items-end gap-3">
           <Button variant="outline" size="sm" onClick={onExit}>
             Arenadan Ayrıl
           </Button>
+          <Minimap chariotsRef={chariotsRef} />
         </div>
 
         <div className="pointer-events-auto absolute bottom-4 right-4 w-64 rounded-lg border border-gold/40 bg-background/80 p-3 backdrop-blur">
