@@ -779,7 +779,9 @@ function Loop({
         else c.speed = Math.max(target, c.speed - 0.02 * dt);
       }
 
-      const laneMult = 1 - (c.lane + 1) * 0.04;
+      // Speed penalty for steering and cornering (smoother, more realistic feel)
+      const turnPenalty = Math.min(0.18, Math.abs(c.laneVel) * 0.22) + curveAmount(c.t) * 0.07;
+      const laneMult = (1 - (c.lane + 1) * 0.04) * (1 - turnPenalty);
       const before = c.t;
       c.t += c.speed * laneMult * dt;
 
