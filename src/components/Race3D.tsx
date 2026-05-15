@@ -12,6 +12,7 @@ type Chariot = {
   name: string;
   t: number;
   lane: number;
+  laneVel: number;
   speed: number;
   baseSpeed: number;
   stamina: number; // 0..1
@@ -41,6 +42,20 @@ const OUTER_RY = 44;
 const LANE_SPAN = OUTER_RY - INNER_RY;
 
 // Forward vector convention: with rotation.y = θ, local +X maps to world (cosθ, 0, -sinθ)
+
+// Returns 1 when on a curve segment, 0 on the straights (uses mid-lane radius for stable bands)
+function curveAmount(t: number) {
+  const ry = INNER_RY + 0.5 * LANE_SPAN;
+  const straightLen = STRAIGHT * 2;
+  const turnLen = Math.PI * ry;
+  const total = 2 * straightLen + 2 * turnLen;
+  const d = (((t % 1) + 1) % 1) * total;
+  if (d < straightLen) return 0;
+  if (d < straightLen + turnLen) return 1;
+  if (d < 2 * straightLen + turnLen) return 0;
+  return 1;
+}
+
 function trackPosClean(t: number, lane: number) {
   const ry = INNER_RY + ((lane + 1) / 2) * LANE_SPAN;
   const straightLen = STRAIGHT * 2;
@@ -93,6 +108,7 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
       name: BLUE_NAMES[i],
       t: rowOffset,
       lane: -0.7 + (i % 2) * 0.05,
+      laneVel: 0,
       speed: 0,
       baseSpeed: 0.024 + Math.random() * 0.005,
       stamina: 1,
@@ -111,6 +127,7 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
       name: GREEN_NAMES[i],
       t: rowOffset - 0.004,
       lane: 0.4 + (i % 2) * 0.05,
+      laneVel: 0,
       speed: 0,
       baseSpeed: 0.024 + Math.random() * 0.005,
       stamina: 1,
@@ -719,8 +736,13 @@ function Loop({
         if (c.speed < target) c.speed = Math.min(target, c.speed + accel * dt);
         else c.speed = Math.max(target, c.speed - accel * 0.6 * dt);
 
-        if (left) c.lane = Math.max(-1, c.lane - 0.9 * dt);
-        if (right) c.lane = Math.min(1, c.lane + 0.9 * dt);
+        // Smooth steering: ramp lateral velocity toward intent
+        const steerInput = (right ? 1 : 0) - (left ? 1 : 0);
+        const desiredLaneVel = steerInput * 0.85;
+        const steerK = Math.min(1, dt * 4.5);
+        c.laneVel += (desiredLaneVel - c.laneVel) * steerK;
+        if (steerInput === 0) c.laneVel *= Math.max(0, 1 - dt * 3.5);
+        c.lane = Math.max(-1, Math.min(1, c.lane + c.laneVel * dt));
       } else {
         const player = chariots.find((pl) => pl.isPlayer);
         const playerT = player ? player.t : c.t;
@@ -729,8 +751,10 @@ function Loop({
         const rubber = gap < 0 ? 1 + Math.min(0.28, -gap * 2.0) : 1 - Math.min(0.05, gap * 0.6);
 
         const targetLane = -0.5 + Math.sin(c.t * 4 + c.id) * 0.4;
-        const diff = targetLane - c.lane;
-        c.lane += Math.sign(diff) * Math.min(0.7 * dt, Math.abs(diff));
+        // Smooth AI steering using laneVel (proportional control + damping)
+        const desiredAIVel = Math.max(-0.7, Math.min(0.7, (targetLane - c.lane) * 1.6));
+        c.laneVel += (desiredAIVel - c.laneVel) * Math.min(1, dt * 3.5);
+        c.lane = Math.max(-1, Math.min(1, c.lane + c.laneVel * dt));
 
         // AI stamina dynamics
         const staminaDrain = c.boostTimer > 0 ? 0.18 : 0.04;
@@ -755,7 +779,9 @@ function Loop({
         else c.speed = Math.max(target, c.speed - 0.02 * dt);
       }
 
-      const laneMult = 1 - (c.lane + 1) * 0.04;
+      // Speed penalty for steering and cornering (smoother, more realistic feel)
+      const turnPenalty = Math.min(0.18, Math.abs(c.laneVel) * 0.22) + curveAmount(c.t) * 0.07;
+      const laneMult = (1 - (c.lane + 1) * 0.04) * (1 - turnPenalty);
       const before = c.t;
       c.t += c.speed * laneMult * dt;
 
