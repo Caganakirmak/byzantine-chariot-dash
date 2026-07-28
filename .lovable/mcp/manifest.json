@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "sdk_version": "0.25.0",
+  "path": "/mcp",
+  "auth": {
+    "type": "none"
+  },
+  "mcp": {
+    "server": {
+      "name": "byzantine-chariot-racing",
+      "version": "0.1.0",
+      "title": "Byzantine Chariot Racing"
+    },
+    "tools": [
+      {
+        "name": "list_charioteers",
+        "title": "List charioteers",
+        "description": "List the eight charioteers of the Hippodrome, optionally filtered by faction (Blues or Greens).",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "team": {
+              "type": "string",
+              "enum": [
+                "blues",
+                "greens",
+                "all"
+              ],
+              "description": "Faction filter. Defaults to 'all'."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_race_rules",
+        "title": "Get race rules and controls",
+        "description": "Explain how a race works: lap count, keyboard/mouse controls, stamina, boost, damage and DNF mechanics.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_hippodrome_lore",
+        "title": "Get Hippodrome lore",
+        "description": "Byzantine background for the game: the Hippodrome, the Blue/Green factions, and the Nika riots setting.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "simulate_race",
+        "title": "Simulate a race",
+        "description": "Run a quick offline simulation of a Hippodrome race and return the finishing order, including any wrecked (DNF) chariots.",
+        "annotations": {
+          "readOnlyHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "seed": {
+              "type": "integer",
+              "description": "Optional integer seed for a reproducible result."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
