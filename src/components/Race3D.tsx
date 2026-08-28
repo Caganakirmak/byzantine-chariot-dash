@@ -778,11 +778,40 @@ function Loop({
         // Stronger rubber-band: catch up harder when behind, only mildly hold back when ahead
         const rubber = gap < 0 ? 1 + Math.min(0.28, -gap * 2.0) : 1 - Math.min(0.05, gap * 0.6);
 
-        const targetLane = -0.5 + Math.sin(c.t * 4 + c.id) * 0.4;
+        // --- Defensive driving: a real charioteer avoids contact ---
+        let avoid = 0;      // lateral steering bias away from hazards
+        let blocked = 0;    // 0..1 how badly something slow sits right ahead
+        for (const o of chariots) {
+          if (o === c || o.removed) continue;
+          if (o.finished && !o.wrecked) continue;
+          let d = o.t - c.t;
+          d -= Math.round(d); // wrap to [-0.5, 0.5]
+          const lookAhead = o.wrecked ? 0.05 : 0.03;
+          if (d < -0.012 || d > lookAhead) continue;
+          const laneGap = c.lane - o.lane;
+          const absLane = Math.abs(laneGap);
+          if (absLane > 0.55) continue;
+          const proximity = 1 - Math.min(1, Math.max(0, d) / lookAhead);
+          const lateral = 1 - absLane / 0.55;
+          const weight = proximity * lateral * (o.wrecked ? 2.4 : 1.3);
+          // steer toward whichever side has more room; prefer the side we're already offset to
+          const side = absLane < 0.06 ? (c.lane > 0 ? -1 : 1) : Math.sign(laneGap);
+          avoid += side * weight;
+          if (d > 0 && absLane < 0.3) blocked = Math.max(blocked, proximity * (o.wrecked ? 1 : 0.7));
+        }
+        // Wall respect: steer back toward the racing groove near the edges
+        const wallMargin = 0.22;
+        if (c.lane > 1 - wallMargin) avoid -= (c.lane - (1 - wallMargin)) / wallMargin * 1.6;
+        if (c.lane < -1 + wallMargin) avoid += ((-1 + wallMargin) - c.lane) / wallMargin * 1.6;
+
+        const racingLane = -0.5 + Math.sin(c.t * 4 + c.id) * 0.4;
+        const targetLane = Math.max(-0.9, Math.min(0.9, racingLane + Math.max(-1.3, Math.min(1.3, avoid))));
         // Smooth AI steering using laneVel (proportional control + damping)
-        const desiredAIVel = Math.max(-0.7, Math.min(0.7, (targetLane - c.lane) * 1.6));
-        c.laneVel += (desiredAIVel - c.laneVel) * Math.min(1, dt * 3.5);
+        const urgency = 1.6 + Math.min(1.6, Math.abs(avoid) * 1.4);
+        const desiredAIVel = Math.max(-0.9, Math.min(0.9, (targetLane - c.lane) * urgency));
+        c.laneVel += (desiredAIVel - c.laneVel) * Math.min(1, dt * (3.5 + Math.abs(avoid) * 3));
         c.lane = Math.max(-1, Math.min(1, c.lane + c.laneVel * dt));
+
 
         // AI stamina dynamics
         const staminaDrain = c.boostTimer > 0 ? 0.18 : 0.04;
