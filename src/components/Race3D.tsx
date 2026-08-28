@@ -700,7 +700,8 @@ function Loop({
     const chariots = chariotsRef.current;
 
     for (const c of chariots) {
-      if (c.finished) continue;
+      if (c.finished && !c.wrecked) continue;
+      if (c.removed) continue;
 
       // Tick boost timers
       if (c.boostTimer > 0) c.boostTimer = Math.max(0, c.boostTimer - dt);
