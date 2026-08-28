@@ -787,8 +787,8 @@ function Loop({
 
       // Wall scrape damage on outer/inner edges
       if (c.lane <= -0.98 || c.lane >= 0.98) {
-        const wallDmg = c.speed * 0.1 * dt + 0.00018;
-        const canWallWreck = c.hp <= CRITICAL_HP_FLOOR && c.speed > 0.026;
+        const wallDmg = c.speed * 0.18 * dt + 0.0004;
+        const canWallWreck = c.hp <= CRITICAL_HP_FLOOR && c.speed > 0.024;
         applyChariotDamage(c, wallDmg, canWallWreck);
         c.speed *= 0.988;
       }
