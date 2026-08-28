@@ -22,6 +22,9 @@ type Chariot = {
   whipPrev: boolean; // for AI/player edge detection
   damageCooldown: number; // prevents one crash from draining HP every frame
   wrecked: boolean;
+  wreckTimer: number; // seconds since the wreck came to a stop
+  removalTime: number; // seconds until the crew hauls the wreck off the track
+  removed: boolean; // hauled away: no longer rendered, no longer an obstacle
   isPlayer: boolean;
   finished: boolean;
   finishOrder?: number;
@@ -34,6 +37,8 @@ const BOOST_STAMINA_COST = 0.28;
 const CRITICAL_HP_FLOOR = 0.08;
 const SEVERE_WRECK_DAMAGE = 0.045;
 const COLLISION_DAMAGE_COOLDOWN = 0.7;
+// Hippodrome crew (hortatores) drag the wreck, horses and driver off the sand
+const WRECK_FADE = 2.2; // seconds of the fade/sink animation
 
 // Track geometry
 const STRAIGHT = 60;
@@ -118,6 +123,9 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
       whipPrev: false,
       damageCooldown: 0,
       wrecked: false,
+      wreckTimer: 0,
+      removalTime: 5.5 + ((i * 1.7) % 3.5),
+      removed: false,
       isPlayer: team === "blue" && i === playerIdx,
       finished: false,
     });
@@ -137,6 +145,9 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
       whipPrev: false,
       damageCooldown: 0,
       wrecked: false,
+      wreckTimer: 0,
+      removalTime: 5.5 + ((i * 1.7) % 3.5),
+      removed: false,
       isPlayer: team === "green" && i === playerIdx,
       finished: false,
     });
@@ -485,9 +496,21 @@ function ChariotMesh({ chariot }: { chariot: Chariot }) {
 
   useFrame((_, delta) => {
     if (!ref.current) return;
+    if (chariot.removed) {
+      ref.current.visible = false;
+      return;
+    }
+    ref.current.visible = true;
     const p = trackPosClean(chariot.t, chariot.lane);
-    ref.current.position.set(p.x, 0, p.z);
+    // Wrecks sink/tilt away as the track crew hauls them off
+    const fade = chariot.wrecked
+      ? Math.min(1, Math.max(0, (chariot.wreckTimer - chariot.removalTime) / WRECK_FADE))
+      : 0;
+    ref.current.position.set(p.x, -fade * 3.2, p.z);
     ref.current.rotation.y = p.angle;
+    ref.current.rotation.z = fade * 0.5;
+    const s = 1 - fade * 0.35;
+    ref.current.scale.set(s, s, s);
     const spin = chariot.speed * 220 * delta;
     if (wheel1.current) wheel1.current.rotation.x += spin;
     if (wheel2.current) wheel2.current.rotation.x += spin;
@@ -693,6 +716,10 @@ function Loop({
           c.finished = true;
           c.finishOrder = 999 + c.id; // DNF: sorted to the back
         }
+        if (c.speed <= 0.001) {
+          c.wreckTimer += dt;
+          if (c.wreckTimer >= c.removalTime + WRECK_FADE) c.removed = true;
+        }
         continue;
       }
 
@@ -807,6 +834,7 @@ function Loop({
         const a = chariots[i];
         const b = chariots[j];
         // Skip only if BOTH have cleanly finished (not wrecked) — wrecked stopped chariots remain as obstacles
+        if (a.removed || b.removed) continue;
         if ((a.finished && !a.wrecked) || (b.finished && !b.wrecked)) continue;
 
         // Compare positions on the track modulo a full lap so that wrecked
@@ -947,6 +975,7 @@ function Minimap({ chariotsRef }: { chariotsRef: React.MutableRefObject<Chariot[
           const cx = sx(p.x);
           const cy = sz(p.z);
           const color = c.team === "blue" ? "#5fb3ff" : "#6be07f";
+          if (c.removed) return null;
           if (c.wrecked) {
             return (
               <g key={c.id}>
