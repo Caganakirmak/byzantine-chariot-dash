@@ -800,74 +800,64 @@ function Loop({
       }
     }
 
-    // Solid-body collision + damage (iterated so stacked contacts fully separate)
-    for (let pass = 0; pass < 3; pass++) {
-      const damagePass = pass === 0;
-      for (let i = 0; i < chariots.length; i++) {
-        for (let j = i + 1; j < chariots.length; j++) {
-          const a = chariots[i];
-          const b = chariots[j];
-          // Skip only if BOTH have cleanly finished (not wrecked) — wrecked stopped chariots remain as obstacles
-          if ((a.finished && !a.wrecked) || (b.finished && !b.wrecked)) continue;
+    // Solid-body collision + damage
+    for (let i = 0; i < chariots.length; i++) {
+      for (let j = i + 1; j < chariots.length; j++) {
+        const a = chariots[i];
+        const b = chariots[j];
+        // Skip only if BOTH have cleanly finished (not wrecked) — wrecked stopped chariots remain as obstacles
+        if ((a.finished && !a.wrecked) || (b.finished && !b.wrecked)) continue;
 
-          // Compare positions on the track modulo a full lap so that wrecked
-          // chariots remain solid obstacles even when the player laps them.
-          let dt2 = a.t - b.t;
-          const dt2Mod = dt2 - Math.round(dt2); // wrap into [-0.5, 0.5]
-          if (Math.abs(dt2Mod) > 0.05) continue;
-          dt2 = dt2Mod;
-          const laneDiff = a.lane - b.lane;
-          const absLane = Math.abs(laneDiff);
-          const absT = Math.abs(dt2);
+        // Compare positions on the track modulo a full lap so that wrecked
+        // chariots remain solid obstacles even when the player laps them.
+        let dt2 = a.t - b.t;
+        let dt2Mod = dt2 - Math.round(dt2); // wrap into [-0.5, 0.5]
+        if (Math.abs(dt2Mod) > 0.05) continue;
+        dt2 = dt2Mod;
+        const laneDiff = a.lane - b.lane;
+        const absLane = Math.abs(laneDiff);
+        const absT = Math.abs(dt2);
 
-          const T_THRESH = 0.013;
-          const LANE_THRESH = 0.34;
+        const T_THRESH = 0.011;
+        const LANE_THRESH = 0.3;
 
-          if (absT < T_THRESH && absLane < LANE_THRESH) {
-            // Fully resolve the overlap on the lane axis (hard bodies, no phasing)
-            const overlap = LANE_THRESH - absLane;
-            const dir = laneDiff >= 0 ? 1 : -1;
-            const push = overlap * 0.5 + 0.002;
-            a.lane = Math.max(-1, Math.min(1, a.lane + dir * push));
-            b.lane = Math.max(-1, Math.min(1, b.lane - dir * push));
-            // Kill the lane velocity pushing them into each other
-            if (dir * a.laneVel < 0) a.laneVel *= -0.25;
-            if (dir * b.laneVel > 0) b.laneVel *= -0.25;
+        if (absT < T_THRESH && absLane < LANE_THRESH) {
+          const lanePush = (LANE_THRESH - absLane) * 0.6;
+          if (laneDiff >= 0) {
+            a.lane = Math.min(1, a.lane + lanePush);
+            b.lane = Math.max(-1, b.lane - lanePush);
+          } else {
+            a.lane = Math.max(-1, a.lane - lanePush);
+            b.lane = Math.min(1, b.lane + lanePush);
+          }
 
-            if (damagePass) {
-              // Every contact hurts — heavier impacts hurt a lot more.
-              const relSpeed = Math.abs(a.speed - b.speed) + 0.004;
-              const impact = relSpeed + Math.max(a.speed, b.speed) * 0.35;
-              const baseDmg = Math.min(0.11, impact * 1.15) + 0.012;
-              const aDmg = baseDmg * (b.wrecked ? 1.8 : 1);
-              const bDmg = baseDmg * (a.wrecked ? 1.8 : 1);
-              const heavyA = b.wrecked || relSpeed > 0.011 || a.speed > 0.024 || a.hp <= CRITICAL_HP_FLOOR;
-              const heavyB = a.wrecked || relSpeed > 0.011 || b.speed > 0.024 || b.hp <= CRITICAL_HP_FLOOR;
-              if (a.damageCooldown <= 0) {
-                applyChariotDamage(a, aDmg, heavyA);
-                a.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
-              }
-              if (b.damageCooldown <= 0) {
-                applyChariotDamage(b, bDmg, heavyB);
-                b.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
-              }
-            }
+          // Every contact deals some damage, but cooldown prevents one impact from draining HP every frame.
+          const relSpeed = Math.abs(a.speed - b.speed) + 0.003;
+          const impact = relSpeed + Math.max(a.speed, b.speed) * 0.2;
+          const baseDmg = Math.min(0.038, impact * 0.46) + 0.0035;
+          const aDmg = baseDmg * (b.wrecked ? 1.45 : 1);
+          const bDmg = baseDmg * (a.wrecked ? 1.45 : 1);
+          const heavyA = b.wrecked || relSpeed > 0.014 || a.speed > 0.026 || a.hp <= CRITICAL_HP_FLOOR;
+          const heavyB = a.wrecked || relSpeed > 0.014 || b.speed > 0.026 || b.hp <= CRITICAL_HP_FLOOR;
+          if (a.damageCooldown <= 0) {
+            applyChariotDamage(a, aDmg, heavyA);
+            a.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
+          }
+          if (b.damageCooldown <= 0) {
+            applyChariotDamage(b, bDmg, heavyB);
+            b.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
+          }
 
-            // Separate along the track too, so nobody drives through the other
-            if (absLane < LANE_THRESH * 0.85) {
-              if (dt2 >= 0) {
-                b.t = a.t - T_THRESH;
-                b.speed = Math.min(b.speed, a.speed * 0.86);
-              } else {
-                a.t = b.t - T_THRESH;
-                a.speed = Math.min(a.speed, b.speed * 0.86);
-              }
-            }
+          if (dt2 >= 0) {
+            b.t = a.t - T_THRESH;
+            b.speed = Math.min(b.speed, a.speed * 0.92);
+          } else {
+            a.t = b.t - T_THRESH;
+            a.speed = Math.min(a.speed, b.speed * 0.92);
           }
         }
       }
     }
-
 
     staminaSyncCounter.current += dt;
     if (staminaSyncCounter.current > 0.08) {
