@@ -800,7 +800,8 @@ function Loop({
       }
     }
 
-    // Solid-body collision + damage
+    // Solid-body collision + damage (two resolution passes so nobody phases through)
+    for (let pass = 0; pass < 2; pass++) {
     for (let i = 0; i < chariots.length; i++) {
       for (let j = i + 1; j < chariots.length; j++) {
         const a = chariots[i];
@@ -818,46 +819,51 @@ function Loop({
         const absLane = Math.abs(laneDiff);
         const absT = Math.abs(dt2);
 
-        const T_THRESH = 0.011;
-        const LANE_THRESH = 0.3;
+        const T_THRESH = 0.013;
+        const LANE_THRESH = 0.32;
 
         if (absT < T_THRESH && absLane < LANE_THRESH) {
-          const lanePush = (LANE_THRESH - absLane) * 0.6;
-          if (laneDiff >= 0) {
-            a.lane = Math.min(1, a.lane + lanePush);
-            b.lane = Math.max(-1, b.lane - lanePush);
-          } else {
-            a.lane = Math.max(-1, a.lane - lanePush);
-            b.lane = Math.min(1, b.lane + lanePush);
-          }
+          const lanePush = (LANE_THRESH - absLane) * 0.85 + 0.01;
+          const dir = laneDiff >= 0 ? 1 : -1;
+          a.lane = Math.max(-1, Math.min(1, a.lane + dir * lanePush));
+          b.lane = Math.max(-1, Math.min(1, b.lane - dir * lanePush));
+          // kill lateral velocity into each other so they don't tunnel next frame
+          a.laneVel = dir > 0 ? Math.max(a.laneVel, 0) : Math.min(a.laneVel, 0);
+          b.laneVel = dir > 0 ? Math.min(b.laneVel, 0) : Math.max(b.laneVel, 0);
 
-          // Every contact deals some damage, but cooldown prevents one impact from draining HP every frame.
-          const relSpeed = Math.abs(a.speed - b.speed) + 0.003;
-          const impact = relSpeed + Math.max(a.speed, b.speed) * 0.2;
-          const baseDmg = Math.min(0.038, impact * 0.46) + 0.0035;
-          const aDmg = baseDmg * (b.wrecked ? 1.45 : 1);
-          const bDmg = baseDmg * (a.wrecked ? 1.45 : 1);
-          const heavyA = b.wrecked || relSpeed > 0.014 || a.speed > 0.026 || a.hp <= CRITICAL_HP_FLOOR;
-          const heavyB = a.wrecked || relSpeed > 0.014 || b.speed > 0.026 || b.hp <= CRITICAL_HP_FLOOR;
-          if (a.damageCooldown <= 0) {
-            applyChariotDamage(a, aDmg, heavyA);
-            a.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
-          }
-          if (b.damageCooldown <= 0) {
-            applyChariotDamage(b, bDmg, heavyB);
-            b.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
+          if (pass === 0) {
+            // Heavier damage: every contact hurts, cooldown keeps it from draining per-frame.
+            const relSpeed = Math.abs(a.speed - b.speed) + 0.004;
+            const impact = relSpeed + Math.max(a.speed, b.speed) * 0.3;
+            const baseDmg = Math.min(0.085, impact * 0.95) + 0.012;
+            const aDmg = baseDmg * (b.wrecked ? 1.9 : 1);
+            const bDmg = baseDmg * (a.wrecked ? 1.9 : 1);
+            const heavyA = b.wrecked || relSpeed > 0.011 || a.speed > 0.024 || a.hp <= CRITICAL_HP_FLOOR;
+            const heavyB = a.wrecked || relSpeed > 0.011 || b.speed > 0.024 || b.hp <= CRITICAL_HP_FLOOR;
+            if (a.damageCooldown <= 0) {
+              applyChariotDamage(a, aDmg, heavyA);
+              a.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
+              a.speed *= 0.94;
+            }
+            if (b.damageCooldown <= 0) {
+              applyChariotDamage(b, bDmg, heavyB);
+              b.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
+              b.speed *= 0.94;
+            }
           }
 
           if (dt2 >= 0) {
             b.t = a.t - T_THRESH;
-            b.speed = Math.min(b.speed, a.speed * 0.92);
+            b.speed = Math.min(b.speed, a.speed * 0.9);
           } else {
             a.t = b.t - T_THRESH;
-            a.speed = Math.min(a.speed, b.speed * 0.92);
+            a.speed = Math.min(a.speed, b.speed * 0.9);
           }
         }
       }
     }
+    }
+
 
     staminaSyncCounter.current += dt;
     if (staminaSyncCounter.current > 0.08) {
