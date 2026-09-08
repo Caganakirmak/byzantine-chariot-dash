@@ -832,6 +832,8 @@ function Loop({
         let target = c.baseSpeed * (1.06 + Math.sin(performance.now() / 700 + c.id) * 0.06) * staminaPenalty * rubber;
         if (c.boostTimer > 0) target = c.baseSpeed * 1.55;
         target *= hpPenalty * variability;
+        // Lift off / brake when something sits right ahead instead of ramming it
+        if (blocked > 0) target *= 1 - blocked * 0.35;
         if (c.speed < target) c.speed = Math.min(target, c.speed + (c.boostTimer > 0 ? 0.06 : 0.04) * dt);
         else c.speed = Math.max(target, c.speed - 0.02 * dt);
       }
