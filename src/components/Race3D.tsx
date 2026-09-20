@@ -836,7 +836,7 @@ function Loop({
         }
 
         const staminaPenalty = c.stamina < 0.2 ? 0.55 + c.stamina * 2 : 1;
-        let target = c.baseSpeed * (1.05 + Math.sin(performance.now() / 700 + c.id) * 0.06) * staminaPenalty * rubber;
+        let target = c.baseSpeed * (1.035 + Math.sin(performance.now() / 700 + c.id) * 0.055) * skill * staminaPenalty * rubber;
         if (c.boostTimer > 0) target = c.baseSpeed * 1.5;
         target *= hpPenalty * variability;
         // Lift off / brake when something sits right ahead instead of ramming it
