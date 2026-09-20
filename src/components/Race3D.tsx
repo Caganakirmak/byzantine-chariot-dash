@@ -913,12 +913,12 @@ function Loop({
             if (a.damageCooldown <= 0) {
               applyChariotDamage(a, aDmg, heavyA);
               a.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
-              a.speed *= 0.94;
+              a.speed *= 0.88;
             }
             if (b.damageCooldown <= 0) {
               applyChariotDamage(b, bDmg, heavyB);
               b.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
-              b.speed *= 0.94;
+              b.speed *= 0.88;
             }
           }
 
