@@ -776,7 +776,7 @@ function Loop({
         const playerT = player ? player.t : c.t;
         const gap = c.t - playerT;
         // Stronger rubber-band: catch up harder when behind, only mildly hold back when ahead
-        const rubber = gap < 0 ? 1 + Math.min(0.16, -gap * 1.3) : 1 - Math.min(0.09, gap * 0.9);
+        const rubber = gap < 0 ? 1 + Math.min(0.25, -gap * 1.8) : 1 - Math.min(0.05, gap * 0.7);
 
         // --- Defensive driving: a real charioteer avoids contact ---
         let avoid = 0;      // lateral steering bias away from hazards
@@ -814,13 +814,13 @@ function Loop({
 
 
         // AI stamina dynamics
-        const staminaDrain = c.boostTimer > 0 ? 0.18 : 0.05;
-        const staminaRegen = 0.06;
+        const staminaDrain = c.boostTimer > 0 ? 0.18 : 0.045;
+        const staminaRegen = 0.065;
         c.stamina = Math.max(0, Math.min(1, c.stamina + (c.boostTimer > 0 ? -staminaDrain : staminaRegen) * dt));
 
         // AI decides to boost more aggressively when behind
         if (c.boostCooldown <= 0 && c.stamina > BOOST_STAMINA_COST + 0.05) {
-          const wantBoost = (gap < -0.004 && Math.random() < 0.012) || (gap < 0.02 && Math.random() < 0.003);
+          const wantBoost = (gap < -0.004 && Math.random() < 0.028) || (gap < 0.02 && Math.random() < 0.006);
           if (wantBoost) {
             c.boostTimer = BOOST_DURATION;
             c.boostCooldown = BOOST_COOLDOWN + Math.random() * 1.0;
@@ -829,7 +829,7 @@ function Loop({
         }
 
         const staminaPenalty = c.stamina < 0.2 ? 0.55 + c.stamina * 2 : 1;
-        let target = c.baseSpeed * (0.99 + Math.sin(performance.now() / 700 + c.id) * 0.055) * staminaPenalty * rubber;
+        let target = c.baseSpeed * (1.05 + Math.sin(performance.now() / 700 + c.id) * 0.06) * staminaPenalty * rubber;
         if (c.boostTimer > 0) target = c.baseSpeed * 1.5;
         target *= hpPenalty * variability;
         // Lift off / brake when something sits right ahead instead of ramming it
