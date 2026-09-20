@@ -34,9 +34,7 @@ const TOTAL_LAPS = 12;
 const BOOST_DURATION = 1.7;
 const BOOST_COOLDOWN = 3.0;
 const BOOST_STAMINA_COST = 0.28;
-const CRITICAL_HP_FLOOR = 0.08;
-const SEVERE_WRECK_DAMAGE = 0.045;
-const COLLISION_DAMAGE_COOLDOWN = 0.7;
+const COLLISION_DAMAGE_COOLDOWN = 0.45;
 // Hippodrome crew (hortatores) drag the wreck, horses and driver off the sand
 const WRECK_FADE = 2.2; // seconds of the fade/sink animation
 
@@ -158,14 +156,16 @@ function makeChariots(team: Team, playerIdx: number): Chariot[] {
 function applyChariotDamage(c: Chariot, amount: number, canWreck: boolean) {
   if (c.wrecked) return;
   const nextHp = c.hp - amount;
-  const terminalImpact = canWreck && nextHp <= CRITICAL_HP_FLOOR;
-  if (terminalImpact || (canWreck && nextHp <= 0)) {
+  // Unforgiving: at 0 HP the chariot shatters — no limp-mode floor. A heavy
+  // impact at low integrity is instantly terminal.
+  const terminalImpact = canWreck && nextHp <= 0.12;
+  if (terminalImpact || nextHp <= 0) {
     c.hp = 0;
     c.wrecked = true;
     c.speed *= 0.2;
     return;
   }
-  c.hp = Math.max(canWreck ? 0 : CRITICAL_HP_FLOOR, nextHp);
+  c.hp = Math.max(0, nextHp);
 }
 
 // ---------- Visuals ----------
@@ -725,7 +725,7 @@ function Loop({
       }
 
       // HP-based speed cap (damage slows the chariot before it actually DNFs)
-      const hpPenalty = c.hp < 0.18 ? 0.42 + c.hp * 1.8 : c.hp < 0.4 ? 0.62 + c.hp * 0.65 : 1;
+      const hpPenalty = c.hp < 0.25 ? 0.35 + c.hp * 1.6 : c.hp < 0.5 ? 0.55 + c.hp * 0.7 : 1;
       // Per-chariot variable speed factor (always changing, never constant)
       const variability = 1 + Math.sin(performance.now() / 800 + c.id * 1.7) * 0.07
         + Math.sin(performance.now() / 230 + c.id * 0.9) * 0.025;
@@ -779,11 +779,12 @@ function Loop({
         // far behind they claw back hard, far ahead they ease off so the race stays alive.
         const dead = 0.006;
         const g = Math.abs(gap) < dead ? 0 : gap - Math.sign(gap) * dead;
-        const rubber = g < 0
-          ? 1 + Math.min(0.20, -g * 1.5)   // behind the player -> push
-          : 1 - Math.min(0.13, g * 1.1);   // leading the player -> back off
+        void g;
+        // Real race: no catch-up tricks — everyone runs their own pace.
+        // Only per-driver skill decides who is genuinely fast.
+        const rubber = 1;
         // Per-driver skill: a couple of genuine rivals, the rest of the pack is beatable
-        const skill = 1 + (((c.id * 0.37) % 1) - 0.45) * 0.07;
+        const skill = 1 + (((c.id * 0.37) % 1) - 0.45) * 0.08;
 
         // --- Defensive driving: a real charioteer avoids contact ---
         let avoid = 0;      // lateral steering bias away from hazards
@@ -853,10 +854,10 @@ function Loop({
 
       // Wall scrape damage on outer/inner edges
       if (c.lane <= -0.98 || c.lane >= 0.98) {
-        const wallDmg = c.speed * 0.18 * dt + 0.0004;
-        const canWallWreck = c.hp <= CRITICAL_HP_FLOOR && c.speed > 0.024;
+        const wallDmg = c.speed * 0.32 * dt + 0.0007;
+        const canWallWreck = c.hp <= 0.3 && c.speed > 0.02;
         applyChariotDamage(c, wallDmg, canWallWreck);
-        c.speed *= 0.988;
+        c.speed *= 0.985;
       }
 
       if (Math.floor(c.t) > Math.floor(before) && Math.floor(c.t) >= TOTAL_LAPS) {
@@ -899,23 +900,23 @@ function Loop({
           b.laneVel = dir > 0 ? Math.min(b.laneVel, 0) : Math.max(b.laneVel, 0);
 
           if (pass === 0) {
-            // Heavier damage: every contact hurts, cooldown keeps it from draining per-frame.
+            // Unforgiving damage: every contact hurts hard; wrecks are near-lethal.
             const relSpeed = Math.abs(a.speed - b.speed) + 0.004;
             const impact = relSpeed + Math.max(a.speed, b.speed) * 0.3;
-            const baseDmg = Math.min(0.085, impact * 0.95) + 0.012;
-            const aDmg = baseDmg * (b.wrecked ? 1.9 : 1);
-            const bDmg = baseDmg * (a.wrecked ? 1.9 : 1);
-            const heavyA = b.wrecked || relSpeed > 0.011 || a.speed > 0.024 || a.hp <= CRITICAL_HP_FLOOR;
-            const heavyB = a.wrecked || relSpeed > 0.011 || b.speed > 0.024 || b.hp <= CRITICAL_HP_FLOOR;
+            const baseDmg = Math.min(0.14, impact * 1.25) + 0.02;
+            const aDmg = baseDmg * (b.wrecked ? 2.3 : 1);
+            const bDmg = baseDmg * (a.wrecked ? 2.3 : 1);
+            const heavyA = b.wrecked || relSpeed > 0.011 || a.speed > 0.024 || a.hp <= 0.25;
+            const heavyB = a.wrecked || relSpeed > 0.011 || b.speed > 0.024 || b.hp <= 0.25;
             if (a.damageCooldown <= 0) {
               applyChariotDamage(a, aDmg, heavyA);
               a.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
-              a.speed *= 0.94;
+              a.speed *= 0.88;
             }
             if (b.damageCooldown <= 0) {
               applyChariotDamage(b, bDmg, heavyB);
               b.damageCooldown = COLLISION_DAMAGE_COOLDOWN;
-              b.speed *= 0.94;
+              b.speed *= 0.88;
             }
           }
 
