@@ -775,8 +775,15 @@ function Loop({
         const player = chariots.find((pl) => pl.isPlayer);
         const playerT = player ? player.t : c.t;
         const gap = c.t - playerT;
-        // Stronger rubber-band: catch up harder when behind, only mildly hold back when ahead
-        const rubber = gap < 0 ? 1 + Math.min(0.25, -gap * 1.8) : 1 - Math.min(0.05, gap * 0.7);
+        // NFS/GT style catch-up: a dead zone keeps close duels honest (no visible cheating),
+        // far behind they claw back hard, far ahead they ease off so the race stays alive.
+        const dead = 0.006;
+        const g = Math.abs(gap) < dead ? 0 : gap - Math.sign(gap) * dead;
+        const rubber = g < 0
+          ? 1 + Math.min(0.20, -g * 1.5)   // behind the player -> push
+          : 1 - Math.min(0.13, g * 1.1);   // leading the player -> back off
+        // Per-driver skill: a couple of genuine rivals, the rest of the pack is beatable
+        const skill = 1 + (((c.id * 0.37) % 1) - 0.45) * 0.07;
 
         // --- Defensive driving: a real charioteer avoids contact ---
         let avoid = 0;      // lateral steering bias away from hazards
