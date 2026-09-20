@@ -827,7 +827,7 @@ function Loop({
 
         // AI decides to boost more aggressively when behind
         if (c.boostCooldown <= 0 && c.stamina > BOOST_STAMINA_COST + 0.05) {
-          const wantBoost = (gap < -0.004 && Math.random() < 0.028) || (gap < 0.02 && Math.random() < 0.006);
+          const wantBoost = (gap < -0.004 && Math.random() < 0.024) || (gap < 0.02 && Math.random() < 0.005);
           if (wantBoost) {
             c.boostTimer = BOOST_DURATION;
             c.boostCooldown = BOOST_COOLDOWN + Math.random() * 1.0;
