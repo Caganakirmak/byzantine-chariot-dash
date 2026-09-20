@@ -34,8 +34,6 @@ const TOTAL_LAPS = 12;
 const BOOST_DURATION = 1.7;
 const BOOST_COOLDOWN = 3.0;
 const BOOST_STAMINA_COST = 0.28;
-const CRITICAL_HP_FLOOR = 0.08;
-const SEVERE_WRECK_DAMAGE = 0.045;
 const COLLISION_DAMAGE_COOLDOWN = 0.45;
 // Hippodrome crew (hortatores) drag the wreck, horses and driver off the sand
 const WRECK_FADE = 2.2; // seconds of the fade/sink animation
