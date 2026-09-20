@@ -31,8 +31,8 @@ type Chariot = {
 };
 
 const TOTAL_LAPS = 12;
-const BOOST_DURATION = 1.6;
-const BOOST_COOLDOWN = 3.5;
+const BOOST_DURATION = 1.7;
+const BOOST_COOLDOWN = 3.0;
 const BOOST_STAMINA_COST = 0.28;
 const CRITICAL_HP_FLOOR = 0.08;
 const SEVERE_WRECK_DAMAGE = 0.045;
@@ -749,14 +749,14 @@ function Loop({
 
         // Held whip drains stamina gradually
         if (whipHeld) {
-          c.stamina = Math.max(0, c.stamina - 0.10 * dt);
+          c.stamina = Math.max(0, c.stamina - 0.075 * dt);
         } else {
-          c.stamina = Math.min(1, c.stamina + 0.05 * dt);
+          c.stamina = Math.min(1, c.stamina + 0.065 * dt);
         }
         // Stamina penalty: only kicks in when stamina is RED (<0.2). Yellow/green = no slowdown.
-        const staminaPenalty = c.stamina < 0.2 ? 0.4 + c.stamina * 2 : 1; // 0.4..0.8 in red, else 1
-        const cruise = c.baseSpeed * 0.92;
-        let target = whipHeld ? c.baseSpeed * 1.18 : brake ? c.baseSpeed * 0.4 : cruise;
+        const staminaPenalty = c.stamina < 0.2 ? 0.5 + c.stamina * 2.5 : 1; // 0.5..1.0 in red, else 1
+        const cruise = c.baseSpeed * 0.95;
+        let target = whipHeld ? c.baseSpeed * 1.2 : brake ? c.baseSpeed * 0.4 : cruise;
         target *= staminaPenalty;
         if (c.boostTimer > 0) target = c.baseSpeed * 1.55;
         target *= hpPenalty * variability;
@@ -776,7 +776,7 @@ function Loop({
         const playerT = player ? player.t : c.t;
         const gap = c.t - playerT;
         // Stronger rubber-band: catch up harder when behind, only mildly hold back when ahead
-        const rubber = gap < 0 ? 1 + Math.min(0.28, -gap * 2.0) : 1 - Math.min(0.05, gap * 0.6);
+        const rubber = gap < 0 ? 1 + Math.min(0.25, -gap * 1.8) : 1 - Math.min(0.05, gap * 0.7);
 
         // --- Defensive driving: a real charioteer avoids contact ---
         let avoid = 0;      // lateral steering bias away from hazards
@@ -814,13 +814,13 @@ function Loop({
 
 
         // AI stamina dynamics
-        const staminaDrain = c.boostTimer > 0 ? 0.18 : 0.04;
-        const staminaRegen = 0.07;
+        const staminaDrain = c.boostTimer > 0 ? 0.18 : 0.045;
+        const staminaRegen = 0.065;
         c.stamina = Math.max(0, Math.min(1, c.stamina + (c.boostTimer > 0 ? -staminaDrain : staminaRegen) * dt));
 
         // AI decides to boost more aggressively when behind
         if (c.boostCooldown <= 0 && c.stamina > BOOST_STAMINA_COST + 0.05) {
-          const wantBoost = (gap < -0.005 && Math.random() < 0.035) || Math.random() < 0.005;
+          const wantBoost = (gap < -0.004 && Math.random() < 0.028) || (gap < 0.02 && Math.random() < 0.006);
           if (wantBoost) {
             c.boostTimer = BOOST_DURATION;
             c.boostCooldown = BOOST_COOLDOWN + Math.random() * 1.0;
@@ -829,8 +829,8 @@ function Loop({
         }
 
         const staminaPenalty = c.stamina < 0.2 ? 0.55 + c.stamina * 2 : 1;
-        let target = c.baseSpeed * (1.06 + Math.sin(performance.now() / 700 + c.id) * 0.06) * staminaPenalty * rubber;
-        if (c.boostTimer > 0) target = c.baseSpeed * 1.55;
+        let target = c.baseSpeed * (1.05 + Math.sin(performance.now() / 700 + c.id) * 0.06) * staminaPenalty * rubber;
+        if (c.boostTimer > 0) target = c.baseSpeed * 1.5;
         target *= hpPenalty * variability;
         // Lift off / brake when something sits right ahead instead of ramming it
         if (blocked > 0) target *= 1 - blocked * 0.35;
