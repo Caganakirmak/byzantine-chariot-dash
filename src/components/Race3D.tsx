@@ -775,8 +775,15 @@ function Loop({
         const player = chariots.find((pl) => pl.isPlayer);
         const playerT = player ? player.t : c.t;
         const gap = c.t - playerT;
-        // Stronger rubber-band: catch up harder when behind, only mildly hold back when ahead
-        const rubber = gap < 0 ? 1 + Math.min(0.25, -gap * 1.8) : 1 - Math.min(0.05, gap * 0.7);
+        // NFS/GT style catch-up: a dead zone keeps close duels honest (no visible cheating),
+        // far behind they claw back hard, far ahead they ease off so the race stays alive.
+        const dead = 0.006;
+        const g = Math.abs(gap) < dead ? 0 : gap - Math.sign(gap) * dead;
+        const rubber = g < 0
+          ? 1 + Math.min(0.20, -g * 1.5)   // behind the player -> push
+          : 1 - Math.min(0.13, g * 1.1);   // leading the player -> back off
+        // Per-driver skill: a couple of genuine rivals, the rest of the pack is beatable
+        const skill = 1 + (((c.id * 0.37) % 1) - 0.45) * 0.07;
 
         // --- Defensive driving: a real charioteer avoids contact ---
         let avoid = 0;      // lateral steering bias away from hazards
@@ -820,7 +827,7 @@ function Loop({
 
         // AI decides to boost more aggressively when behind
         if (c.boostCooldown <= 0 && c.stamina > BOOST_STAMINA_COST + 0.05) {
-          const wantBoost = (gap < -0.004 && Math.random() < 0.028) || (gap < 0.02 && Math.random() < 0.006);
+          const wantBoost = (gap < -0.004 && Math.random() < 0.024) || (gap < 0.02 && Math.random() < 0.005);
           if (wantBoost) {
             c.boostTimer = BOOST_DURATION;
             c.boostCooldown = BOOST_COOLDOWN + Math.random() * 1.0;
@@ -829,7 +836,7 @@ function Loop({
         }
 
         const staminaPenalty = c.stamina < 0.2 ? 0.55 + c.stamina * 2 : 1;
-        let target = c.baseSpeed * (1.05 + Math.sin(performance.now() / 700 + c.id) * 0.06) * staminaPenalty * rubber;
+        let target = c.baseSpeed * (1.035 + Math.sin(performance.now() / 700 + c.id) * 0.055) * skill * staminaPenalty * rubber;
         if (c.boostTimer > 0) target = c.baseSpeed * 1.5;
         target *= hpPenalty * variability;
         // Lift off / brake when something sits right ahead instead of ramming it
